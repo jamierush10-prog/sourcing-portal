@@ -4,13 +4,14 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
-import { collection, writeBatch, doc, getDocs, query, orderBy, where, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, writeBatch, doc, getDocs, query, orderBy, where, updateDoc, deleteDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 
 interface MaterialItem {
   id: string;
+  rfqId: string; // Manually keyed requisition / project number
   itemNumber: string;
   description: string;
   quantity: number;
@@ -30,6 +31,7 @@ interface SupplierProfile {
 interface BidResponse {
   id: string;
   materialId: string;
+  rfqId: string;
   itemNumber: string;
   description: string;
   supplierNo: string;
@@ -49,8 +51,15 @@ export default function AdminDashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState("");
 
+  // Filter Modal Toggle & Input Parameter States
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [filterRfqId, setFilterRfqId] = useState("");
+  const [filterItemNumber, setFilterItemNumber] = useState("");
+  const [filterDescription, setFilterDescription] = useState("");
+
   // CRUD Inline Editing States
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editRfqId, setEditRfqId] = useState("");
   const [editItemNumber, setEditItemNumber] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editQuantity, setEditQuantity] = useState<number>(0);
@@ -142,11 +151,13 @@ export default function AdminDashboard() {
           results.data.forEach((row: any) => {
             const newDocRef = doc(collection(db, "materials"));
             batch.set(newDocRef, {
+              rfqId: row["RFQ ID"] || row["rfqId"] || "REQ-UNASSIGNED", // Pull keyed reference from CSV column
               itemNumber: row["Item"] || row["itemNumber"] || "UNKNOWN",
               description: row["Description"] || row["description"] || "",
               quantity: Number(row["Qty"] || row["quantity"] || 0),
               uom: row["UOM"] || row["uom"] || "EA",
               status: "Pending",
+              timestamp: new Date() // Sets creation upload date stamp
             });
           });
 
@@ -156,9 +167,8 @@ export default function AdminDashboard() {
         } catch (error) {
           console.error("CSV upload batch failed:", error);
           setFeedbackMessage("Failed to process data columns.");
-        } finally {
+        } fillAll:
           setIsUploading(false);
-        }
       },
     });
   };
@@ -166,6 +176,7 @@ export default function AdminDashboard() {
   // INLINE CRUD ACTIONS ENGINE
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
+    setEditRfqId(item.rfqId || "");
     setEditItemNumber(item.itemNumber);
     setEditDescription(item.description);
     setEditQuantity(item.quantity);
@@ -181,6 +192,7 @@ export default function AdminDashboard() {
     try {
       const docRef = doc(db, "materials", id);
       await updateDoc(docRef, {
+        rfqId: editRfqId.trim(), // Committing the manual keyed field change
         itemNumber: editItemNumber.trim(),
         description: editDescription.trim(),
         quantity: Number(editQuantity),
@@ -197,7 +209,7 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteItemRow = async (id: string) => {
-    if (!confirm("Are you sure you want to completely delete this line requirement from the procurement index?")) return;
+    if (!confirm("Are you sure you want to completely delete this line requirement?")) return;
     try {
       await deleteDoc(doc(db, "materials", id));
       fetchMaterialsAndCounts();
@@ -206,19 +218,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // SOURCING RFQ MANAGEMENT METHODS
-  const openSourcingModal = (item: MaterialItem) => {
-    setSelectedItem(item);
-    setSelectedSupplierNos([]);
-    setIsModalOpen(true);
-  };
-
-  const handleToggleSupplierSelection = (supplierNo: string) => {
-    setSelectedSupplierNos((prev) =>
-      prev.includes(supplierNo) ? prev.filter((no) => no !== supplierNo) : [...prev, supplierNo]
-    );
-  };
-
+  // SOURCING RFQ DISPATCH LOGIC
   const handleDispatchRFQ = async () => {
     if (!selectedItem || selectedSupplierNos.length === 0) return;
     setIsRouting(true);
@@ -230,6 +230,7 @@ export default function AdminDashboard() {
         const rfqDocRef = doc(collection(db, "rfq_routing"));
         batch.set(rfqDocRef, {
           materialId: selectedItem.id,
+          rfqId: selectedItem.rfqId || "—", // Stamping manual coded reference onto vendor payload layout
           itemNumber: selectedItem.itemNumber,
           description: selectedItem.description,
           quantity: selectedItem.quantity,
@@ -239,7 +240,7 @@ export default function AdminDashboard() {
           offeredPrice: null,
           leadTime: null,
           supplierNote: "",
-          timestamp: new Date(),
+          timestamp: null, // Cleared initially until vendor replies
         });
       });
 
@@ -284,11 +285,10 @@ export default function AdminDashboard() {
     }
   };
 
-  // EXCEL SPREADSHEET EXPORT MASTER BUILDER RUNTIME
+  // EXCEL MASTER SPREADSHEET EXPORT
   const handleExportAllQuotesToExcel = async () => {
     setIsExportingExcel(true);
     try {
-      // 1. Fetch ALL completed quote records inside the procurement architecture
       const q = query(collection(db, "rfq_routing"), where("status", "==", "Completed"));
       const snapshot = await getDocs(q);
       const allQuotes: any[] = [];
@@ -297,20 +297,17 @@ export default function AdminDashboard() {
         allQuotes.push(doc.data());
       });
 
-      // 2. Query all corporate platform users to map their submission emails cleanly
       const usersSnapshot = await getDocs(collection(db, "users"));
       const usersList: any[] = [];
       usersSnapshot.forEach((doc) => {
         usersList.push({ uid: doc.id, ...doc.data() });
       });
 
-      // 3. Initialize dynamic workbook using ExcelJS engine
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Master Received Quotes Log");
 
-      // Set explicit table structure headers
       worksheet.columns = [
-        { header: "RFQ ID", key: "rfqId", width: 15 },
+        { header: "RFQ ID", key: "rfqId", width: 16 },
         { header: "Item #", key: "itemNo", width: 14 },
         { header: "Material Description", key: "desc", width: 36 },
         { header: "Quantity", key: "qty", width: 10 },
@@ -324,13 +321,11 @@ export default function AdminDashboard() {
         { header: "Quote Submittal Date Stamp", key: "dateStamp", width: 24 }
       ];
 
-      // Format Header Style
       worksheet.getRow(1).height = 26;
       worksheet.getRow(1).font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 11 };
       worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "0F172A" } }; 
       worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
 
-      // 4. Fill rows and handle database parameters relational linking loop
       allQuotes.forEach((quote) => {
         const vendorProfile = suppliers.find(s => s.supplierNo === quote.supplierNo);
         const userMatch = usersList.find(u => u.supplierNo === quote.supplierNo && u.role === "supplier");
@@ -341,7 +336,7 @@ export default function AdminDashboard() {
         });
 
         const row = worksheet.addRow({
-          rfqId: quote.materialId ? `RFQ-${quote.materialId.substring(0, 5).toUpperCase()}` : "—",
+          rfqId: quote.rfqId || "—", // Maps keyed identifier instead of database hash value
           itemNo: quote.itemNumber || "—",
           desc: quote.description || "",
           qty: Number(quote.quantity || 0),
@@ -355,7 +350,6 @@ export default function AdminDashboard() {
           dateStamp: formattedDate
         });
 
-        // Align and Format Cell parameters cleanly
         row.height = 20;
         row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
@@ -363,11 +357,10 @@ export default function AdminDashboard() {
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("price").numFmt = "$#,##0.00"; // Fixed compiler type assignment rule property
+        row.getCell("price").numFmt = "$#,##0.00";
         row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
       });
 
-      // Apply borders and striping to grid cells
       worksheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -385,7 +378,6 @@ export default function AdminDashboard() {
         });
       });
 
-      // 5. Build write array and prompt web browser file download action
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = window.URL.createObjectURL(blob);
@@ -396,18 +388,34 @@ export default function AdminDashboard() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Excel generation execution error:", err);
-      alert("Error compiling spreadsheet data.");
     } finally {
       setIsExportingExcel(false);
     }
   };
 
+  // CLIENT-SIDE FILTER SEARCH ENGINE MAPPING MATCH
+  const filteredMaterials = materials.filter((item) => {
+    const rfqField = (item.rfqId || "").toLowerCase();
+    const itemNoField = (item.itemNumber || "").toLowerCase();
+    const descField = (item.description || "").toLowerCase();
+
+    return (
+      rfqField.includes(filterRfqId.trim().toLowerCase()) &&
+      itemNoField.includes(filterItemNumber.trim().toLowerCase()) &&
+      descField.includes(filterDescription.trim().toLowerCase())
+    );
+  });
+
+  const clearFilterFields = () => {
+    setFilterRfqId("");
+    setFilterItemNumber("");
+    setFilterDescription("");
+  };
+
   const formatTimestamp = (ts: any) => {
     if (!ts) return "—";
     const date = ts.toDate ? ts.toDate() : new Date(ts);
-    return date.toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit"
-    });
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
   const getSupplierName = (supNo: string) => {
@@ -425,6 +433,13 @@ export default function AdminDashboard() {
           <p className="text-sm text-slate-500">Parse master material parameters and manage vendor distribution metrics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* FILTER CONSOLE BUTTON TRIGGER */}
+          <button
+            onClick={() => setIsFilterModalOpen(true)}
+            className="text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
+          >
+            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
+          </button>
           <button
             onClick={handleExportAllQuotesToExcel}
             disabled={isExportingExcel}
@@ -481,26 +496,34 @@ export default function AdminDashboard() {
                 <th className="py-3 px-6">UOM</th>
                 <th className="py-3 px-6 text-center">Bids Received</th>
                 <th className="py-3 px-6 text-center">Status</th>
-                <th className="py-3 px-6 text-center">Console Management Operations</th>
+                <th className="py-3 px-6 text-center">Console Operations</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
-              {materials.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-slate-400">No records imported yet.</td></tr>
+              {filteredMaterials.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-slate-400">No matching requirements located.</td></tr>
               ) : (
-                materials.map((item) => {
+                filteredMaterials.map((item) => {
                   const isEditingRow = editingItemId === item.id;
-                  const computedRfqId = `RFQ-${item.id.substring(0, 5).toUpperCase()}`;
 
                   return (
                     <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditingRow ? 'bg-amber-50/40' : ''}`}>
                       
-                      {/* 1. RFQ ID FIELD PREFIX */}
-                      <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-400 bg-slate-50/40">
-                        {computedRfqId}
+                      {/* MANUAL REQUISITION KEY FIELD ROW */}
+                      <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">
+                        {isEditingRow ? (
+                          <input
+                            type="text"
+                            value={editRfqId}
+                            onChange={(e) => setEditRfqId(e.target.value)}
+                            className="w-24 text-center text-xs rounded border border-slate-300 px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono uppercase font-bold"
+                            placeholder="e.g. PROJECT-1"
+                          />
+                        ) : (
+                          item.rfqId || <span className="text-slate-300">—</span>
+                        )}
                       </td>
 
-                      {/* 2. ITEM NUMBER FIELD */}
                       <td className="py-4 px-6 font-mono font-medium text-slate-900">
                         {isEditingRow ? (
                           <input
@@ -514,7 +537,6 @@ export default function AdminDashboard() {
                         )}
                       </td>
 
-                      {/* 3. MATERIAL DESCRIPTION FIELD */}
                       <td className="py-4 px-6 max-w-xs truncate" title={item.description}>
                         {isEditingRow ? (
                           <input
@@ -528,7 +550,6 @@ export default function AdminDashboard() {
                         )}
                       </td>
 
-                      {/* 4. QUANTITY REQUIREMENT FIELD */}
                       <td className="py-4 px-6 text-right font-semibold">
                         {isEditingRow ? (
                           <input
@@ -542,7 +563,6 @@ export default function AdminDashboard() {
                         )}
                       </td>
 
-                      {/* 5. UNIT OF MEASURE FIELD */}
                       <td className="py-4 px-6 text-slate-500">
                         {isEditingRow ? (
                           <input
@@ -556,7 +576,6 @@ export default function AdminDashboard() {
                         )}
                       </td>
                       
-                      {/* 6. BIDS COUNT COUNTER BADGE */}
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-bold ${
                           (item.quoteCount || 0) > 0 ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-600/20' : 'bg-slate-100 text-slate-400'
@@ -565,14 +584,12 @@ export default function AdminDashboard() {
                         </span>
                       </td>
 
-                      {/* 7. DISPATCH STATUS FLAGGING BADGE */}
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           item.status === 'Pending' ? 'bg-yellow-50 text-yellow-800 ring-1 ring-yellow-600/20' : 'bg-blue-50 text-blue-800 ring-1 ring-blue-600/20'
                         }`}>{item.status}</span>
                       </td>
 
-                      {/* 8. OPERATIONS CONTROLS BUTTONS */}
                       <td className="py-4 px-6 text-center whitespace-nowrap space-x-1.5">
                         {isEditingRow ? (
                           <>
@@ -608,14 +625,12 @@ export default function AdminDashboard() {
                             <button 
                               onClick={() => startEditingRow(item)}
                               className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                              title="Edit Material Row"
                             >
                               ✏️
                             </button>
                             <button 
                               onClick={() => handleDeleteItemRow(item.id)}
                               className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-                              title="Delete Material Row"
                             >
                               🗑️
                             </button>
@@ -631,7 +646,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* DISPATCH SOURCING MODAL */}
+      {/* ADMIN DISPATCH MODAL */}
       {isModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl border border-slate-200">
@@ -662,7 +677,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* DETAILED LOG QUOTES VIEWER MODAL */}
+      {/* RECEIVED QUOTES AUDIT LOGGER */}
       {isQuotesModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
@@ -673,7 +688,7 @@ export default function AdminDashboard() {
 
             <div className="overflow-y-auto flex-1 my-2 border border-slate-100 rounded bg-slate-50/50 min-h-[150px]">
               {isQuotesLoading ? (
-                <div className="p-12 text-center text-sm text-slate-500">Querying live sub-payload data arrays...</div>
+                <div className="p-12 text-center text-sm text-slate-500">Querying live logs...</div>
               ) : activeItemQuotes.length === 0 ? (
                 <div className="p-12 text-center text-sm text-slate-400">No active quotes returned for this line reference.</div>
               ) : (
@@ -718,6 +733,67 @@ export default function AdminDashboard() {
                 className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
               >
                 Close Audit View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OVERLAY FILTER CRITERIA SLIDEOUT PANEL MODAL */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
+            <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
+              <h3 className="text-md font-bold text-slate-900">Filter Procurement Items</h3>
+              <button 
+                type="button" 
+                onClick={clearFilterFields} 
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+              >
+                Reset All
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Keyed RFQ ID / Project Reference</label>
+                <input
+                  type="text"
+                  value={filterRfqId}
+                  onChange={(e) => setFilterRfqId(e.target.value)}
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-mono"
+                  placeholder="e.g. REQ-001"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
+                <input
+                  type="text"
+                  value={filterItemNumber}
+                  onChange={(e) => setFilterItemNumber(e.target.value)}
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                  placeholder="e.g. 1001-A"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
+                <input
+                  type="text"
+                  value={filterDescription}
+                  onChange={(e) => setFilterDescription(e.target.value)}
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="e.g. Steel Plate"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+              >
+                Apply Filters ({filteredMaterials.length} Rows Found)
               </button>
             </div>
           </div>
