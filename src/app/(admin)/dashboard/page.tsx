@@ -327,7 +327,7 @@ export default function AdminDashboard() {
       // Format Header Style
       worksheet.getRow(1).height = 26;
       worksheet.getRow(1).font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 11 };
-      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "0F172A" } }; // Slate-900 Accent
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "0F172A" } }; 
       worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
 
       // 4. Fill rows and handle database parameters relational linking loop
@@ -355,7 +355,7 @@ export default function AdminDashboard() {
           dateStamp: formattedDate
         });
 
-        // Align and Format Cell parameters
+        // Align and Format Cell parameters cleanly
         row.height = 20;
         row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
@@ -364,10 +364,10 @@ export default function AdminDashboard() {
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
         row.getCell("price").numberFormat = "$#,##0.00";
-row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
-});
+        row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
+      });
 
-      // Apply borders to grid cells
+      // Apply borders and striping to grid cells
       worksheet.eachRow({ includeHeader: true }, (row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -379,7 +379,7 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
           if (rowNumber > 1) {
             cell.font = { name: "Segoe UI", size: 10 };
             if (rowNumber % 2 === 0) {
-              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } }; // Subtle striping
+              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } }; 
             }
           }
         });
@@ -425,7 +425,6 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
           <p className="text-sm text-slate-500">Parse master material parameters and manage vendor distribution metrics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* EXCEL QUOTES COMPILATION REPORT EXPORT BUTTON */}
           <button
             onClick={handleExportAllQuotesToExcel}
             disabled={isExportingExcel}
@@ -482,7 +481,7 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
                 <th className="py-3 px-6">UOM</th>
                 <th className="py-3 px-6 text-center">Bids Received</th>
                 <th className="py-3 px-6 text-center">Status</th>
-                <th className="py-3 px-6确 text-center">Console Management Operations</th>
+                <th className="py-3 px-6 text-center">Console Management Operations</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
@@ -573,7 +572,7 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
                         }`}>{item.status}</span>
                       </td>
 
-                      {/* 8. OPERATIONS CONTROLS BUTTONS (SOURCE, VIEW, INLINE EDIT, INLINE DELETE) */}
+                      {/* 8. OPERATIONS CONTROLS BUTTONS */}
                       <td className="py-4 px-6 text-center whitespace-nowrap space-x-1.5">
                         {isEditingRow ? (
                           <>
@@ -606,8 +605,6 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
                             >
                               Quotes
                             </button>
-                            
-                            {/* INLINE ROW CRUD EDIT OPERATIONS TRIGGER */}
                             <button 
                               onClick={() => startEditingRow(item)}
                               className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
@@ -615,8 +612,6 @@ row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
                             >
                               ✏️
                             </button>
-                            
-                            {/* INLINE ROW CRUD DELETE SYSTEM DESTRUCTION OPERATION */}
                             <button 
                               onClick={() => handleDeleteItemRow(item.id)}
                               className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
