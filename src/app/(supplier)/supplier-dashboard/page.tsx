@@ -51,7 +51,7 @@ export default function SupplierDashboard() {
     try {
       const q = query(
         collection(db, "rfq_routing"),
-        where("supplierId", "==", user.uid)
+        where("supplierId", "==", user?.uid)
       );
       const snapshot = await getDocs(q);
       const list: RFQItem[] = [];
