@@ -153,7 +153,7 @@ export default function SupplierDashboard() {
 
       worksheet.getRow(1).height = 26;
       worksheet.getRow(1).font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" } };
-      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } }; // Dark blue theme
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } }; 
       worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
 
       filteredRows.forEach((item) => {
@@ -185,7 +185,7 @@ export default function SupplierDashboard() {
         row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
         if (item.offeredPrice !== null) {
-          row.getCell("price").numberFormat = "$#,##0.00";
+          row.getCell("price").numFmt = "$#,##0.00";
           row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
         } else {
           row.getCell("price").alignment = { horizontal: "center", vertical: "middle" };
@@ -334,19 +334,18 @@ export default function SupplierDashboard() {
                     const isEditing = editingId === item.id;
                     const computedRfqId = item.materialId ? `RFQ-${item.materialId.substring(0, 5).toUpperCase()}` : "—";
                     
-                    // Pull date uploaded from materials mapping object
                     const matchingMaterialDoc = materialsMap[item.materialId];
                     const rawUploadedTimestamp = matchingMaterialDoc?.timestamp || null;
 
                     return (
                       <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
                         
-                        {/* 1. RFQ ID COLUMN */}
+                        {/* RFQ ID COLUMN */}
                         <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-400 bg-slate-50/20">
                           {computedRfqId}
                         </td>
 
-                        {/* 2. ITEM NUMBER COLUMN */}
+                        {/* ITEM NUMBER COLUMN */}
                         <td className="py-4 px-6 font-mono font-medium text-slate-900">{item.itemNumber}</td>
                         <td className="py-4 px-6 max-w-xs truncate" title={item.description}>{item.description}</td>
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
@@ -402,17 +401,17 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* DATE LINE ITEM WAS UPLOADED ADDED TO APP */}
+                        {/* DATE LINE ITEM WAS UPLOADED */}
                         <td className="py-3 px-6 whitespace-nowrap">
                           {formatTimestamp(rawUploadedTimestamp, "dateOnly")}
                         </td>
 
-                        {/* Bid Proposal Timestamp Submission date */}
+                        {/* Bid Proposal Timestamp Submission */}
                         <td className="py-3 px-6 text-xs">
                           {formatTimestamp(item.timestamp, "fullTime")}
                         </td>
 
-                        {/* Table Loop Actions panel */}
+                        {/* Controls */}
                         <td className="py-3 px-6 text-center whitespace-nowrap">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-2">
@@ -446,7 +445,7 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* SLIDEOUT INTERACTIVE MULTI-PARAMETER FILTER MODAL OVERLAY */}
+      {/* FILTER PARAMETERS MODAL OVERLAY */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
@@ -469,7 +468,7 @@ export default function SupplierDashboard() {
                   value={filterRfqId}
                   onChange={(e) => setFilterRfqId(e.target.value)}
                   className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-mono"
-                  placeholder="e.g. RFQs-A12B"
+                  placeholder="e.g. RFQ-A12B"
                 />
               </div>
               <div>
@@ -494,4 +493,18 @@ export default function SupplierDashboard() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(false)}
+                className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+              >
+                Apply Active Parameters ({filteredRows.length} Rows Found)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
