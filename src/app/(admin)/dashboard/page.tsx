@@ -174,6 +174,28 @@ export default function AdminDashboard() {
     });
   };
 
+  // DYNAMICALLY GENERATED IMPORT TEMPLATE DOWNLOAD (WITH RFQ ID COLUMN)
+  const downloadCsvTemplate = () => {
+    const headers = ["RFQ ID", "Item", "Description", "Qty", "UOM"];
+    const sampleRows = [
+      ["REQ-2026-01", "1001-A", "3/4\" Structural Carbon Steel Plate A36", "12", "EA"],
+      ["PROJECT-BLUE", "1002-B", "Grade 60 #5 Rebar Deformed Steel 20ft", "250", "LF"]
+    ];
+    
+    const csvContent = [headers, ...sampleRows]
+      .map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "Material_Requirements_Template.csv");
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // INLINE CRUD ACTIONS ENGINE
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
     setEditRfqId(item.rfqId || "");
@@ -460,13 +482,20 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* CSV Import Layout */}
+      {/* CSV Import Layout with Template Download */}
       <div className="mb-8 p-4 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
           <h4 className="text-sm font-bold text-slate-800">Import Master Material Requirements</h4>
-          <p className="text-xs text-slate-500">Upload bulk CSV listings targeting Item, Description, Qty, and UOM parameters</p>
+          <p className="text-xs text-slate-500">Upload bulk CSV listings or use the template to key in your custom RFQ/Requisition numbers</p>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+          <button
+            type="button"
+            onClick={downloadCsvTemplate}
+            className="text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded transition-colors"
+          >
+            📥 Download Import Template
+          </button>
           <input type="file" accept=".csv" onChange={handleCSVUpload} disabled={isUploading} className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
           {feedbackMessage && <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded">{feedbackMessage}</span>}
         </div>
@@ -569,7 +598,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ADMIN DISPATCH MODAL */}
+      {/* DISPATCH SOURCING MODAL */}
       {isModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl border border-slate-200">
@@ -646,7 +675,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* FILTER MODAL */}
+      {/* FILTER MODAL SLIDEOUT */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
