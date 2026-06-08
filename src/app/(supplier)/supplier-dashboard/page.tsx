@@ -18,6 +18,7 @@ interface RFQItem {
   offeredPrice: number | null;
   leadTime: string | null;
   supplierNote: string;
+  timestamp: any; // Captures when the quote was saved
 }
 
 export default function SupplierDashboard() {
@@ -41,7 +42,6 @@ export default function SupplierDashboard() {
   }, [profile, loading, router]);
 
   useEffect(() => {
-    // Cast profile to any to bypass strict TypeScript interface checking during build
     const supplierProfile = profile as any;
     if (!loading && profile?.role === "supplier" && supplierProfile?.supplierNo) {
       fetchSupplierRFQs();
@@ -54,7 +54,6 @@ export default function SupplierDashboard() {
     try {
       const q = query(
         collection(db, "rfq_routing"),
-        // Match against the supplier number code assigned by admin
         where("supplierNo", "==", supplierProfile?.supplierNo || "")
       );
       const snapshot = await getDocs(q);
@@ -94,11 +93,14 @@ export default function SupplierDashboard() {
     setIsSaving(true);
     try {
       const rfqDocRef = doc(db, "rfq_routing", rfqId);
+      
+      // Update with price, specs, and a fresh date stamp token
       await updateDoc(rfqDocRef, {
         offeredPrice: parsedPrice,
         leadTime: leadTime.trim(),
         supplierNote: vendorNotes.trim(),
-        status: "Completed"
+        status: "Completed",
+        timestamp: new Date() // Stamping submittal date real-time
       });
 
       setEditingId(null);
@@ -111,9 +113,26 @@ export default function SupplierDashboard() {
     }
   };
 
+  // CLEAN GRAPHICAL FORMATTING FOR TIMESTAMPS
+  const formatTimestamp = (ts: any, status: string) => {
+    if (status === "Pending" || !ts) return <span className="text-slate-300">—</span>;
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    return (
+      <span className="font-medium text-slate-600 block whitespace-nowrap">
+        {date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        })}
+        <span className="text-[10px] text-slate-400 block font-normal">
+          {date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </span>
+    );
+  };
+
   if (loading) return <div className="p-8 text-sm text-slate-500">Verifying security parameters...</div>;
 
-  // Safe reference for heading data rendering
   const currentSupplierNo = (profile as any)?.supplierNo || "——";
 
   return (
@@ -151,13 +170,14 @@ export default function SupplierDashboard() {
                   <th className="py-3 px-6">Your Price ($)</th>
                   <th className="py-3 px-6">Lead Time</th>
                   <th className="py-3 px-6">Notes</th>
+                  <th className="py-3 px-6">Quote Date</th>
                   <th className="py-3 px-6 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-800">
                 {rfqs.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
                       No material requests dispatched to your supplier code queue yet.
                     </td>
                   </tr>
@@ -171,6 +191,7 @@ export default function SupplierDashboard() {
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                         <td className="py-4 px-6 text-slate-500">{item.uom}</td>
                         
+                        {/* Unit Price */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -188,6 +209,7 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
+                        {/* Lead Time */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -202,6 +224,7 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
+                        {/* Supplier Notes */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -218,6 +241,12 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
+                        {/* SUBMITTAL DATE STAMP LOG COLUMN */}
+                        <td className="py-3 px-6 text-xs">
+                          {formatTimestamp(item.timestamp, item.status)}
+                        </td>
+
+                        {/* Actions */}
                         <td className="py-3 px-6 text-center whitespace-nowrap">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-2">
