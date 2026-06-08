@@ -16,6 +16,7 @@ interface MaterialItem {
   description: string;
   quantity: number;
   uom: string;
+  buyer: string; // Tracks buying agent identifier assignment
   status: "Pending" | "Sourced" | "Completed";
   quoteCount?: number;
 }
@@ -34,6 +35,7 @@ interface BidResponse {
   rfqId: string;
   itemNumber: string;
   description: string;
+  buyer: string;
   supplierNo: string;
   offeredPrice: number | null;
   leadTime: string | null;
@@ -56,6 +58,7 @@ export default function AdminDashboard() {
   const [filterRfqId, setFilterRfqId] = useState("");
   const [filterItemNumber, setFilterItemNumber] = useState("");
   const [filterDescription, setFilterDescription] = useState("");
+  const [filterBuyer, setFilterBuyer] = useState("");
 
   // CRUD Inline Editing States
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export default function AdminDashboard() {
   const [editDescription, setEditDescription] = useState("");
   const [editQuantity, setEditQuantity] = useState<number>(0);
   const [editUom, setEditUom] = useState("");
+  const [editBuyer, setEditBuyer] = useState("");
   const [isSavingCrud, setIsSavingCrud] = useState(false);
 
   // Sourcing Modal States
@@ -104,7 +108,6 @@ export default function AdminDashboard() {
         itemsList.push({ id: doc.id, ...doc.data(), quoteCount: 0 } as MaterialItem);
       });
 
-      // Count only completed replies for the main grid badge metric
       const routingQuery = query(collection(db, "rfq_routing"), where("status", "==", "Completed"));
       const routingSnapshot = await getDocs(routingQuery);
       
@@ -158,6 +161,7 @@ export default function AdminDashboard() {
               description: row["Description"] || row["description"] || "",
               quantity: Number(row["Qty"] || row["quantity"] || 0),
               uom: row["UOM"] || row["uom"] || "EA",
+              buyer: row["Buyer"] || row["buyer"] || "UNASSIGNED", // Maps buyer explicitly from CSV array
               status: "Pending",
               timestamp: new Date()
             });
@@ -176,11 +180,12 @@ export default function AdminDashboard() {
     });
   };
 
+  // GENERATE IMPORT TEMPLATE DOWNSTREAM (WITH EXPLICIT BUYER HEADER COLUMN)
   const downloadCsvTemplate = () => {
-    const headers = ["RFQ ID", "Item", "Description", "Qty", "UOM"];
+    const headers = ["RFQ ID", "Item", "Description", "Qty", "UOM", "Buyer"];
     const sampleRows = [
-      ["REQ-2026-01", "1001-A", "3/4\" Structural Carbon Steel Plate A36", "12", "EA"],
-      ["PROJECT-BLUE", "1002-B", "Grade 60 #5 Rebar Deformed Steel 20ft", "250", "LF"]
+      ["REQ-2026-01", "1001-A", "3/4\" Structural Carbon Steel Plate A36", "12", "EA", "James Rush"],
+      ["PROJECT-BLUE", "1002-B", "Grade 60 #5 Rebar Deformed Steel 20ft", "250", "LF", "J. Rush"]
     ];
     
     const csvContent = [headers, ...sampleRows]
@@ -196,7 +201,7 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
-  // CRUD Inline Editing States
+  // INLINE CRUD ACTIONS ENGINE
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
     setEditRfqId(item.rfqId || "");
@@ -204,6 +209,7 @@ export default function AdminDashboard() {
     setEditDescription(item.description);
     setEditQuantity(item.quantity);
     setEditUom(item.uom);
+    setEditBuyer(item.buyer || "");
   };
 
   const cancelEditingRow = () => {
@@ -220,6 +226,7 @@ export default function AdminDashboard() {
         description: editDescription.trim(),
         quantity: Number(editQuantity),
         uom: editUom.trim(),
+        buyer: editBuyer.trim() // Commit inline buyer revision edits
       });
       setEditingItemId(null);
       fetchMaterialsAndCounts();
@@ -269,6 +276,7 @@ export default function AdminDashboard() {
           description: selectedItem.description,
           quantity: selectedItem.quantity,
           uom: selectedItem.uom,
+          buyer: selectedItem.buyer || "UNASSIGNED", // Relational bind of buyer parameter to supplier sub-payload
           supplierNo: supNo,
           status: "Pending",
           offeredPrice: null,
@@ -291,7 +299,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // AUDIT VIEWER: LOADS ALL ROUTED LOGS AND SEPARATES PENDING VS RECEIVED
   const openQuotesViewerModal = async (item: MaterialItem) => {
     setSelectedItem(item);
     setReleasedVendors([]);
@@ -308,7 +315,6 @@ export default function AdminDashboard() {
       
       snapshot.forEach((doc) => {
         const data = doc.data() as BidResponse;
-        // Fix: Change spread operator ordering to prevent duplicate 'id' override error flags
         if (data.status === "Completed") {
           completedBids.push({ ...data, id: doc.id });
         } else {
@@ -316,7 +322,6 @@ export default function AdminDashboard() {
         }
       });
 
-      // Sort bids by price lowest to highest
       completedBids.sort((a, b) => (a.offeredPrice || 0) - (b.offeredPrice || 0));
       
       setReleasedVendors(pendingRelease);
@@ -354,6 +359,7 @@ export default function AdminDashboard() {
         { header: "Material Description", key: "desc", width: 36 },
         { header: "Quantity", key: "qty", width: 10 },
         { header: "UOM", key: "uom", width: 8 },
+        { header: "Buyer Assigned", key: "buyer", width: 16 }, // Added to spreadsheet columns structure map
         { header: "Supplier Corporate Name", key: "supplierName", width: 26 },
         { header: "Supplier Code", key: "supplierNo", width: 14 },
         { header: "Submitted By (User Email)", key: "userEmail", width: 28 },
@@ -383,6 +389,7 @@ export default function AdminDashboard() {
           desc: quote.description || "",
           qty: Number(quote.quantity || 0),
           uom: quote.uom || "EA",
+          buyer: quote.buyer || "—",
           supplierName: vendorProfile ? vendorProfile.companyName : `Vendor Code: ${quote.supplierNo}`,
           supplierNo: quote.supplierNo || "",
           userEmail: userMatch ? userMatch.email : (vendorProfile ? vendorProfile.email : "—"),
@@ -397,13 +404,13 @@ export default function AdminDashboard() {
         row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell("buyer").alignment = { horizontal: "left", vertical: "middle" };
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("price").numFmt = "$#,##0.00"; // Fix: Adjusted property type mapping format rule
+        row.getCell("price").numFmt = "$#,##0.00";
         row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
       });
 
-      // Fix: Removed rogue string literal tag errors from rows iteration loops
       worksheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -440,11 +447,13 @@ export default function AdminDashboard() {
     const rfqField = (item.rfqId || "").toLowerCase();
     const itemNoField = (item.itemNumber || "").toLowerCase();
     const descField = (item.description || "").toLowerCase();
+    const buyerField = (item.buyer || "").toLowerCase();
 
     return (
       rfqField.includes(filterRfqId.trim().toLowerCase()) &&
       itemNoField.includes(filterItemNumber.trim().toLowerCase()) &&
-      descField.includes(filterDescription.trim().toLowerCase())
+      descField.includes(filterDescription.trim().toLowerCase()) &&
+      buyerField.includes(filterBuyer.trim().toLowerCase())
     );
   });
 
@@ -452,6 +461,7 @@ export default function AdminDashboard() {
     setFilterRfqId("");
     setFilterItemNumber("");
     setFilterDescription("");
+    setFilterBuyer("");
   };
 
   const formatTimestamp = (ts: any) => {
@@ -479,7 +489,7 @@ export default function AdminDashboard() {
             onClick={() => setIsFilterModalOpen(true)}
             className="text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
           >
-            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
+            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
           </button>
           <button
             onClick={handleExportAllQuotesToExcel}
@@ -526,6 +536,7 @@ export default function AdminDashboard() {
                 <th className="py-3 px-6">Description</th>
                 <th className="py-3 px-6 text-right">Qty</th>
                 <th className="py-3 px-6">UOM</th>
+                <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> {/* Added Buyer Column Heading */}
                 <th className="py-3 px-6 text-center">Bids Received</th>
                 <th className="py-3 px-6 text-center">Status</th>
                 <th className="py-3 px-6 text-center">Console Operations</th>
@@ -533,7 +544,7 @@ export default function AdminDashboard() {
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-800">
               {filteredMaterials.length === 0 ? (
-                <tr><td colSpan={8} className="py-8 text-center text-slate-400">No matching requirements located.</td></tr>
+                <tr><td colSpan={9} className="py-8 text-center text-slate-400">No matching requirements located.</td></tr>
               ) : (
                 filteredMaterials.map((item) => {
                   const isEditingRow = editingItemId === item.id;
@@ -575,6 +586,16 @@ export default function AdminDashboard() {
                           item.uom
                         )}
                       </td>
+                      
+                      {/* BUYER DATA VALUE INLINE CELL */}
+                      <td className="py-4 px-6 text-slate-700 font-medium">
+                        {isEditingRow ? (
+                          <input type="text" value={editBuyer} onChange={(e) => setEditBuyer(e.target.value)} className="w-24 text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900" placeholder="Agent" />
+                        ) : (
+                          item.buyer || <span className="text-slate-300">Unassigned</span>
+                        )}
+                      </td>
+
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-bold ${
                           (item.quoteCount || 0) > 0 ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-600/20' : 'bg-slate-100 text-slate-400'
@@ -638,7 +659,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* UPGRADED QUOTES AUDIT LOGGER (SHOWS RELEASED & RECEIVED BIDS) */}
+      {/* QUOTES AUDIT LOGGER */}
       {isQuotesModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
@@ -652,7 +673,6 @@ export default function AdminDashboard() {
                 <div className="p-12 text-center text-sm text-slate-500">Querying live logs...</div>
               ) : (
                 <>
-                  {/* SECTION 1: WHO THE LINE WAS RELEASED TO */}
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">1. Released Vendors (Pending Quotes)</h4>
                     <div className="border border-slate-200 rounded-md bg-slate-50/50 overflow-hidden">
@@ -681,7 +701,6 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* SECTION 2: BIDS RECEIVED DETAILS */}
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">2. Received Procurement Quotes</h4>
                     <div className="border border-slate-200 rounded-md overflow-hidden">
@@ -759,6 +778,11 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
                 <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Plate" />
+              </div>
+              {/* Added Buyer Parameter inside the slides filtering overlay grid */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer Assigned</label>
+                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. James Rush" />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">

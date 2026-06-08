@@ -11,11 +11,12 @@ import { useRouter } from "next/navigation";
 interface RFQItem {
   id: string;
   materialId: string;
-  rfqId: string; // <-- ADD THIS LINE RIGHT HERE
+  rfqId: string; 
   itemNumber: string;
   description: string;
   quantity: number;
   uom: string;
+  buyer: string; // Exposes assignment identifier to type interface definition
   status: "Pending" | "Completed";
   offeredPrice: number | null;
   leadTime: string | null;
@@ -36,6 +37,7 @@ export default function SupplierDashboard() {
   const [filterRfqId, setFilterRfqId] = useState("");
   const [filterItemNumber, setFilterItemNumber] = useState("");
   const [filterDescription, setFilterDescription] = useState("");
+  const [filterBuyer, setFilterBuyer] = useState("");
 
   // Inline Bidding Entry States
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,7 +56,6 @@ export default function SupplierDashboard() {
   }, [profile, loading, router]);
 
   useEffect(() => {
-    // Cast profile to any to bypass strict TypeScript interface checking during build
     const supplierProfile = profile as any;
     if (!loading && profile?.role === "supplier" && supplierProfile?.supplierNo) {
       fetchSupplierWorkspaceData();
@@ -65,7 +66,6 @@ export default function SupplierDashboard() {
     setIsDataLoading(true);
     const supplierProfile = profile as any;
     try {
-      // 1. Pull master material logs to capture creation dates natively
       const materialsSnapshot = await getDocs(collection(db, "materials"));
       const matMap: Record<string, any> = {};
       materialsSnapshot.forEach((doc) => {
@@ -73,7 +73,6 @@ export default function SupplierDashboard() {
       });
       setMaterialsMap(matMap);
 
-      // 2. Query routed items assigned to this vendor
       const q = query(
         collection(db, "rfq_routing"),
         where("supplierNo", "==", supplierProfile?.supplierNo || "")
@@ -129,7 +128,7 @@ export default function SupplierDashboard() {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
     } finally {
-      setIsSaving(false);
+      setIsSaving= false;
     }
   };
 
@@ -145,6 +144,7 @@ export default function SupplierDashboard() {
         { header: "Description", key: "desc", width: 36 },
         { header: "Quantity", key: "qty", width: 10 },
         { header: "UOM", key: "uom", width: 8 },
+        { header: "Buyer", key: "buyer", width: 16 }, // Maps buyer heading into vendor export script
         { header: "Your Price ($)", key: "price", width: 16 },
         { header: "Lead Time", key: "leadTime", width: 16 },
         { header: "Notes", key: "notes", width: 30 },
@@ -173,6 +173,7 @@ export default function SupplierDashboard() {
           desc: item.description || "",
           qty: Number(item.quantity || 0),
           uom: item.uom || "EA",
+          buyer: item.buyer || "—",
           price: item.offeredPrice !== null ? Number(item.offeredPrice) : "Pending",
           leadTime: item.leadTime || "—",
           notes: item.supplierNote || "",
@@ -185,6 +186,7 @@ export default function SupplierDashboard() {
         row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell("buyer").alignment = { horizontal: "left", vertical: "middle" };
         if (item.offeredPrice !== null) {
           row.getCell("price").numFmt = "$#,##0.00";
           row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
@@ -244,13 +246,15 @@ export default function SupplierDashboard() {
     const matchesRfqId = computedRfqId.includes(filterRfqId.trim().toLowerCase());
     const matchesItemNo = (item.itemNumber || "").toLowerCase().includes(filterItemNumber.trim().toLowerCase());
     const matchesDesc = (item.description || "").toLowerCase().includes(filterDescription.trim().toLowerCase());
-    return matchesRfqId && matchesItemNo && matchesDesc;
+    const matchesBuyer = (item.buyer || "").toLowerCase().includes(filterBuyer.trim().toLowerCase());
+    return matchesRfqId && matchesItemNo && matchesDesc && matchesBuyer;
   });
 
   const clearFilterFields = () => {
     setFilterRfqId("");
     setFilterItemNumber("");
     setFilterDescription("");
+    setFilterBuyer("");
   };
 
   if (loading) return <div className="p-8 text-sm text-slate-500">Verifying security parameters...</div>;
@@ -273,8 +277,9 @@ export default function SupplierDashboard() {
             onClick={() => setIsFilterModalOpen(true)}
             className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
           >
-            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
+            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
           </button>
+          
           <button
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
@@ -302,6 +307,7 @@ export default function SupplierDashboard() {
                   <th className="py-3 px-6">Description</th>
                   <th className="py-3 px-6 text-right">Qty</th>
                   <th className="py-3 px-6">UOM</th>
+                  <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> {/* Added Buyer Heading inside Vendor log grid view */}
                   <th className="py-3 px-6">Your Price ($)</th>
                   <th className="py-3 px-6">Lead Time</th>
                   <th className="py-3 px-6">Notes</th>
@@ -313,7 +319,7 @@ export default function SupplierDashboard() {
               <tbody className="divide-y divide-slate-200 text-slate-800">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-400">No material requests matched your criteria.</td>
+                    <td colSpan={12} className="py-12 text-center text-slate-400">No material requests matched your criteria.</td>
                   </tr>
                 ) : (
                   filteredRows.map((item) => {
@@ -329,6 +335,9 @@ export default function SupplierDashboard() {
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                         <td className="py-4 px-6 text-slate-500">{item.uom}</td>
                         
+                        {/* BUYER CELL DISPLAY */}
+                        <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">{item.buyer || <span className="text-slate-300">—</span>}</td>
+
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -421,6 +430,11 @@ export default function SupplierDashboard() {
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
                 <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Pipe" />
+              </div>
+              {/* Added Buyer filter control inside supplier overlay layout view grid */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
+                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. James Rush" />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
