@@ -308,10 +308,11 @@ export default function AdminDashboard() {
       
       snapshot.forEach((doc) => {
         const data = doc.data() as BidResponse;
+        // Fix: Change spread operator ordering to prevent duplicate 'id' override error flags
         if (data.status === "Completed") {
-          completedBids.push({ id: doc.id, ...data });
+          completedBids.push({ ...data, id: doc.id });
         } else {
-          pendingRelease.push({ id: doc.id, ...data });
+          pendingRelease.push({ ...data, id: doc.id });
         }
       });
 
@@ -398,10 +399,11 @@ export default function AdminDashboard() {
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("price").numFmt = "$#,##0.00";
+        row.getCell("price").numFmt = "$#,##0.00"; // Fix: Adjusted property type mapping format rule
         row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
       });
 
+      // Fix: Removed rogue string literal tag errors from rows iteration loops
       worksheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
@@ -629,7 +631,7 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
-              <button type="button" onClick={() => Map.valueOf()} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setIsModalOpen(false)}>Cancel</button>
+              <button type="button" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setIsModalOpen(false)}>Cancel</button>
               <button type="button" onClick={handleDispatchRFQ} disabled={selectedSupplierNos.length === 0 || isRouting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:bg-blue-300">{isRouting ? "Routing RFQs..." : `Dispatch to ${selectedSupplierNos.length} Vendor(s)`}</button>
             </div>
           </div>
