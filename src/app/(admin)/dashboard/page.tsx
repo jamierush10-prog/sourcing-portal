@@ -38,7 +38,7 @@ interface BidResponse {
   offeredPrice: number | null;
   leadTime: string | null;
   supplierNote: string;
-  status: string;
+  status: "Pending" | "Completed";
   timestamp: any;
 }
 
@@ -74,7 +74,8 @@ export default function AdminDashboard() {
 
   // Quotes Viewer Modal States
   const [isQuotesModalOpen, setIsQuotesModalOpen] = useState(false);
-  const [activeItemQuotes, setActiveItemQuotes] = useState<BidResponse[]>([]);
+  const [releasedVendors, setReleasedVendors] = useState<BidResponse[]>([]);
+  const [receivedQuotes, setReceivedQuotes] = useState<BidResponse[]>([]);
   const [isQuotesLoading, setIsQuotesLoading] = useState(false);
 
   // Excel Export Progress Spinner
@@ -103,6 +104,7 @@ export default function AdminDashboard() {
         itemsList.push({ id: doc.id, ...doc.data(), quoteCount: 0 } as MaterialItem);
       });
 
+      // Count only completed replies for the main grid badge metric
       const routingQuery = query(collection(db, "rfq_routing"), where("status", "==", "Completed"));
       const routingSnapshot = await getDocs(routingQuery);
       
@@ -174,7 +176,6 @@ export default function AdminDashboard() {
     });
   };
 
-  // DYNAMICALLY GENERATED IMPORT TEMPLATE DOWNLOAD (WITH RFQ ID COLUMN)
   const downloadCsvTemplate = () => {
     const headers = ["RFQ ID", "Item", "Description", "Qty", "UOM"];
     const sampleRows = [
@@ -195,7 +196,7 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
-  // INLINE CRUD ACTIONS ENGINE
+  // CRUD Inline Editing States
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
     setEditRfqId(item.rfqId || "");
@@ -290,27 +291,35 @@ export default function AdminDashboard() {
     }
   };
 
+  // AUDIT VIEWER: LOADS ALL ROUTED LOGS AND SEPARATES PENDING VS RECEIVED
   const openQuotesViewerModal = async (item: MaterialItem) => {
     setSelectedItem(item);
-    setActiveItemQuotes([]);
+    setReleasedVendors([]);
+    setReceivedQuotes([]);
     setIsQuotesLoading(true);
     setIsQuotesModalOpen(true);
 
     try {
-      const q = query(
-        collection(db, "rfq_routing"),
-        where("materialId", "==", item.id),
-        where("status", "==", "Completed")
-      );
+      const q = query(collection(db, "rfq_routing"), where("materialId", "==", item.id));
       const snapshot = await getDocs(q);
-      const quotesList: BidResponse[] = [];
+      
+      const pendingRelease: BidResponse[] = [];
+      const completedBids: BidResponse[] = [];
       
       snapshot.forEach((doc) => {
-        quotesList.push({ id: doc.id, ...doc.data() } as BidResponse);
+        const data = doc.data() as BidResponse;
+        if (data.status === "Completed") {
+          completedBids.push({ id: doc.id, ...data });
+        } else {
+          pendingRelease.push({ id: doc.id, ...data });
+        }
       });
 
-      quotesList.sort((a, b) => (a.offeredPrice || 0) - (b.offeredPrice || 0));
-      setActiveItemQuotes(quotesList);
+      // Sort bids by price lowest to highest
+      completedBids.sort((a, b) => (a.offeredPrice || 0) - (b.offeredPrice || 0));
+      
+      setReleasedVendors(pendingRelease);
+      setReceivedQuotes(completedBids);
     } catch (err) {
       console.error("Failed compiling internal bid data elements:", err);
     } finally {
@@ -482,7 +491,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* CSV Import Layout with Template Download */}
+      {/* CSV Import Layout */}
       <div className="mb-8 p-4 bg-white border border-slate-200 rounded-lg shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div>
           <h4 className="text-sm font-bold text-slate-800">Import Master Material Requirements</h4>
@@ -583,7 +592,7 @@ export default function AdminDashboard() {
                         ) : (
                           <>
                             <button onClick={() => openSourcingModal(item)} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">Source</button>
-                            <button onClick={() => openQuotesViewerModal(item)} disabled={(item.quoteCount || 0) === 0} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-30">Quotes</button>
+                            <button onClick={() => openQuotesViewerModal(item)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">Quotes</button>
                             <button onClick={() => startEditingRow(item)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100">✏️</button>
                             <button onClick={() => handleDeleteItemRow(item.id)} className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100">🗑️</button>
                           </>
@@ -620,56 +629,109 @@ export default function AdminDashboard() {
               ))}
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
-              <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={() => Map.valueOf()} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setIsModalOpen(false)}>Cancel</button>
               <button type="button" onClick={handleDispatchRFQ} disabled={selectedSupplierNos.length === 0 || isRouting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:bg-blue-300">{isRouting ? "Routing RFQs..." : `Dispatch to ${selectedSupplierNos.length} Vendor(s)`}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* RECEIVED QUOTES AUDIT LOGGER */}
+      {/* UPGRADED QUOTES AUDIT LOGGER (SHOWS RELEASED & RECEIVED BIDS) */}
       {isQuotesModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
             <div className="border-b border-slate-200 pb-3 mb-4">
-              <h3 className="text-lg font-bold text-slate-900">Received Procurement Quotes</h3>
-              <p className="text-xs text-slate-500 mt-1">Audit log for Item Requirement: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{selectedItem.itemNumber}</span></p>
+              <h3 className="text-lg font-bold text-slate-900">Procurement Audit Log</h3>
+              <p className="text-xs text-slate-500 mt-1">Status check for Item Number Reference: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{selectedItem.itemNumber}</span></p>
             </div>
-            <div className="overflow-y-auto flex-1 my-2 border border-slate-100 rounded bg-slate-50/50 min-h-[150px]">
+
+            <div className="overflow-y-auto flex-1 my-2 space-y-6 pr-1">
               {isQuotesLoading ? (
                 <div className="p-12 text-center text-sm text-slate-500">Querying live logs...</div>
-              ) : activeItemQuotes.length === 0 ? (
-                <div className="p-12 text-center text-sm text-slate-400">No active quotes returned for this line reference.</div>
               ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-                    <tr>
-                      <th className="py-2.5 px-4">Supplier Firm Name</th>
-                      <th className="py-2.5 px-4 text-right">Unit Price ($)</th>
-                      <th className="py-2.5 px-4">Lead Time</th>
-                      <th className="py-2.5 px-4">Vendor Notes Reference</th>
-                      <th className="py-2.5 px-4">Quote Date Stamp</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 text-slate-700 bg-white">
-                    {activeItemQuotes.map((quote) => (
-                      <tr key={quote.id} className="hover:bg-blue-50/20 transition-all">
-                        <td className="py-3 px-4 font-semibold text-slate-900">
-                          <div>{getSupplierName(quote.supplierNo)}</div>
-                          <span className="font-mono text-[10px] text-slate-400 font-bold block mt-0.5">Code: {quote.supplierNo}</span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-bold text-emerald-700 font-mono text-sm">${quote.offeredPrice !== null ? quote.offeredPrice.toFixed(2) : "0.00"}</td>
-                        <td className="py-3 px-4 font-medium text-slate-800">{quote.leadTime || "—"}</td>
-                        <td className="py-3 px-4 text-slate-500 italic max-w-xs truncate" title={quote.supplierNote}>{quote.supplierNote || <span className="text-slate-300">None attached</span>}</td>
-                        <td className="py-3 px-4 font-medium text-slate-600 whitespace-nowrap">{formatTimestamp(quote.timestamp)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <>
+                  {/* SECTION 1: WHO THE LINE WAS RELEASED TO */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">1. Released Vendors (Pending Quotes)</h4>
+                    <div className="border border-slate-200 rounded-md bg-slate-50/50 overflow-hidden">
+                      {releasedVendors.length === 0 ? (
+                        <p className="p-4 text-xs text-slate-400 italic bg-white">No pending responses. All released vendors have submitted quotes.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                            <tr>
+                              <th className="py-2 px-4">Supplier Name</th>
+                              <th className="py-2 px-4">Vendor Code</th>
+                              <th className="py-2 px-4">Current Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+                            {releasedVendors.map((vendor) => (
+                              <tr key={vendor.id}>
+                                <td className="py-2.5 px-4 font-semibold text-slate-800">{getSupplierName(vendor.supplierNo)}</td>
+                                <td className="py-2.5 px-4 font-mono text-slate-500">{vendor.supplierNo}</td>
+                                <td className="py-2.5 px-4"><span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-0.5 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">Pending Response</span></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: BIDS RECEIVED DETAILS */}
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">2. Received Procurement Quotes</h4>
+                    <div className="border border-slate-200 rounded-md overflow-hidden">
+                      {receivedQuotes.length === 0 ? (
+                        <p className="p-4 text-xs text-slate-400 italic bg-white">No active bids received from vendors yet.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                            <tr>
+                              <th className="py-2 px-4">Supplier Firm Name</th>
+                              <th className="py-2 px-4 text-right">Unit Price ($)</th>
+                              <th className="py-2 px-4">Lead Time</th>
+                              <th className="py-2 px-4">Vendor Notes Reference</th>
+                              <th className="py-2 px-4">Quote Date Stamp</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+                            {receivedQuotes.map((quote) => (
+                              <tr key={quote.id} className="hover:bg-blue-50/20 transition-all">
+                                <td className="py-3 px-4 font-semibold text-slate-900">
+                                  <div>{getSupplierName(quote.supplierNo)}</div>
+                                  <span className="font-mono text-[10px] text-slate-400 font-bold block mt-0.5">Code: {quote.supplierNo}</span>
+                                </td>
+                                <td className="py-3 px-4 text-right font-bold text-emerald-700 font-mono text-sm">
+                                  ${quote.offeredPrice !== null ? quote.offeredPrice.toFixed(2) : "0.00"}
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-800">{quote.leadTime || "—"}</td>
+                                <td className="py-3 px-4 text-slate-500 italic max-w-xs truncate" title={quote.supplierNote}>
+                                  {quote.supplierNote || <span className="text-slate-300">None attached</span>}
+                                </td>
+                                <td className="py-3 px-4 font-medium text-slate-600 whitespace-nowrap">
+                                  {formatTimestamp(quote.timestamp)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
+
             <div className="flex justify-end border-t border-slate-200 pt-4 mt-4">
-              <button type="button" onClick={() => { setIsQuotesModalOpen(false); setSelectedItem(null); }} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">Close Audit View</button>
+              <button 
+                type="button" 
+                onClick={() => { setIsQuotesModalOpen(false); setSelectedItem(null); }}
+                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+              >
+                Close Audit View
+              </button>
             </div>
           </div>
         </div>
