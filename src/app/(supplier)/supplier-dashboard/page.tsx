@@ -16,7 +16,7 @@ interface RFQItem {
   description: string;
   quantity: number;
   uom: string;
-  buyer: string; // Exposes assignment identifier to type interface definition
+  buyer: string; 
   status: "Pending" | "Completed";
   offeredPrice: number | null;
   leadTime: string | null;
@@ -128,7 +128,7 @@ export default function SupplierDashboard() {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
     } finally {
-      setIsSaving=(false);
+      setIsSaving(false);
     }
   };
 
@@ -144,7 +144,7 @@ export default function SupplierDashboard() {
         { header: "Description", key: "desc", width: 36 },
         { header: "Quantity", key: "qty", width: 10 },
         { header: "UOM", key: "uom", width: 8 },
-        { header: "Buyer", key: "buyer", width: 16 }, // Maps buyer heading into vendor export script
+        { header: "Buyer", key: "buyer", width: 16 }, 
         { header: "Your Price ($)", key: "price", width: 16 },
         { header: "Lead Time", key: "leadTime", width: 16 },
         { header: "Notes", key: "notes", width: 30 },
@@ -307,7 +307,7 @@ export default function SupplierDashboard() {
                   <th className="py-3 px-6">Description</th>
                   <th className="py-3 px-6 text-right">Qty</th>
                   <th className="py-3 px-6">UOM</th>
-                  <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> {/* Added Buyer Heading inside Vendor log grid view */}
+                  <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> 
                   <th className="py-3 px-6">Your Price ($)</th>
                   <th className="py-3 px-6">Lead Time</th>
                   <th className="py-3 px-6">Notes</th>
@@ -334,8 +334,6 @@ export default function SupplierDashboard() {
                         <td className="py-4 px-6 max-w-xs truncate" title={item.description}>{item.description}</td>
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                         <td className="py-4 px-6 text-slate-500">{item.uom}</td>
-                        
-                        {/* BUYER CELL DISPLAY */}
                         <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">{item.buyer || <span className="text-slate-300">—</span>}</td>
 
                         <td className="py-3 px-4">
@@ -431,7 +429,6 @@ export default function SupplierDashboard() {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
                 <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Pipe" />
               </div>
-              {/* Added Buyer filter control inside supplier overlay layout view grid */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
                 <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. James Rush" />
