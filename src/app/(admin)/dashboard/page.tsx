@@ -364,9 +364,8 @@ export default function AdminDashboard() {
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
         row.getCell("price").numberFormat = "$#,##0.00";
-        row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
-      </style>
-      });
+row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
+});
 
       // Apply borders to grid cells
       worksheet.eachRow({ includeHeader: true }, (row, rowNumber) => {
