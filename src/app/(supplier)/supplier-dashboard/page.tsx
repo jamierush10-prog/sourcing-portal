@@ -21,13 +21,13 @@ interface RFQItem {
 }
 
 export default function SupplierDashboard() {
-  const { profile, user, loading } = useAuth();
+  const { profile, loading } = useAuth();
   const router = useRouter();
 
   const [rfqs, setRfqs] = useState<RFQItem[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // Inline Editing States
+  // Inline Bidding Entry States
   const [editingId, setEditingId] = useState<string | null>(null);
   const [bidPrice, setBidPrice] = useState<string>("");
   const [leadTime, setLeadTime] = useState<string>("");
@@ -41,17 +41,18 @@ export default function SupplierDashboard() {
   }, [profile, loading, router]);
 
   useEffect(() => {
-    if (!loading && profile?.role === "supplier" && user?.uid) {
+    // Execute query only when the supplier profile and its code are resolved
+    if (!loading && profile?.role === "supplier" && profile?.supplierNo) {
       fetchSupplierRFQs();
     }
-  }, [profile, user, loading]);
+  }, [profile, loading]);
 
   const fetchSupplierRFQs = async () => {
     setIsDataLoading(true);
     try {
       const q = query(
         collection(db, "rfq_routing"),
-        where("supplierId", "==", user?.uid)
+        where("supplierNo", "==", profile.supplierNo)
       );
       const snapshot = await getDocs(q);
       const list: RFQItem[] = [];
@@ -90,20 +91,18 @@ export default function SupplierDashboard() {
     setIsSaving(true);
     try {
       const rfqDocRef = doc(db, "rfq_routing", rfqId);
-      
-      // Update the routing entry with vendor metrics
       await updateDoc(rfqDocRef, {
         offeredPrice: parsedPrice,
         leadTime: leadTime.trim(),
         supplierNote: vendorNotes.trim(),
-        status: "Completed" // Switches status to complete once they bid
+        status: "Completed"
       });
 
       setEditingId(null);
-      fetchSupplierRFQs(); // Refresh the table metrics
+      fetchSupplierRFQs(); 
     } catch (err) {
       console.error("Failed to commit supplier bid data:", err);
-      alert("Error saving your bid. Please try again.");
+      alert("Error saving your bid.");
     } finally {
       setIsSaving(false);
     }
@@ -118,7 +117,9 @@ export default function SupplierDashboard() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             {profile?.companyName || "Vendor"} Bidding Terminal
           </h1>
-          <p className="text-sm text-slate-500">Review open material requirements, log quote pricing, and specify execution lead times</p>
+          <p className="text-sm text-slate-500">
+            Supplier Code: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{profile?.supplierNo}</span>
+          </p>
         </div>
         <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-700/10">
           Authorized Supplier Portal
@@ -151,7 +152,7 @@ export default function SupplierDashboard() {
                 {rfqs.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-400">
-                      No material requests dispatched to your profile queue yet.
+                      No material requests dispatched to your supplier code queue yet.
                     </td>
                   </tr>
                 ) : (
@@ -164,7 +165,6 @@ export default function SupplierDashboard() {
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                         <td className="py-4 px-6 text-slate-500">{item.uom}</td>
                         
-                        {/* Unit Price Field */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -172,7 +172,7 @@ export default function SupplierDashboard() {
                               step="0.01"
                               value={bidPrice}
                               onChange={(e) => setBidPrice(e.target.value)}
-                              className="w-24 rounded border border-slate-300 px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                               placeholder="0.00"
                             />
                           ) : item.offeredPrice !== null ? (
@@ -182,7 +182,6 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* Lead Time Field */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -197,7 +196,6 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* Supplier Notes Field */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -214,28 +212,24 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* Interactive Buttons */}
                         <td className="py-3 px-6 text-center whitespace-nowrap">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-2">
                               <button
                                 onClick={() => handleSaveBid(item.id)}
                                 disabled={isSaving}
-                                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:bg-emerald-300"
+                                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
                               >
                                 {isSaving ? "Saving..." : "Save"}
                               </button>
-                              <button
-                                onClick={cancelEditing}
-                                className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                              >
+                              <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
                                 Cancel
                               </button>
                             </div>
                           ) : (
                             <button
                               onClick={() => startEditing(item)}
-                              className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-sm hover:bg-blue-100 transition-colors"
+                              className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
                             >
                               {item.offeredPrice !== null ? "Edit Bid" : "Quote Price"}
                             </button>
