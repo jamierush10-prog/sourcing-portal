@@ -19,7 +19,7 @@ interface RFQItem {
   offeredPrice: number | null;
   leadTime: string | null;
   supplierNote: string;
-  timestamp: any; // Submittal date stamp token
+  timestamp: any; 
 }
 
 export default function SupplierDashboard() {
@@ -53,6 +53,7 @@ export default function SupplierDashboard() {
   }, [profile, loading, router]);
 
   useEffect(() => {
+    // Cast profile to any to bypass strict TypeScript interface checking during build
     const supplierProfile = profile as any;
     if (!loading && profile?.role === "supplier" && supplierProfile?.supplierNo) {
       fetchSupplierWorkspaceData();
@@ -131,7 +132,6 @@ export default function SupplierDashboard() {
     }
   };
 
-  // EXCEL TABLE SPREADSHEET BUILDER TRIGGER
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -167,7 +167,7 @@ export default function SupplierDashboard() {
           : "—";
 
         const row = worksheet.addRow({
-          rfqId: item.materialId ? `RFQ-${item.materialId.substring(0, 5).toUpperCase()}` : "—",
+          rfqId: item.rfqId || "—",
           itemNo: item.itemNumber || "",
           desc: item.description || "",
           qty: Number(item.quantity || 0),
@@ -224,7 +224,6 @@ export default function SupplierDashboard() {
     }
   };
 
-  // DATA TIMESTAMPS FORMATTING UTILITIES
   const formatTimestamp = (ts: any, mode: "dateOnly" | "fullTime") => {
     if (!ts) return <span className="text-slate-300">—</span>;
     const date = ts.toDate ? ts.toDate() : new Date(ts);
@@ -239,10 +238,9 @@ export default function SupplierDashboard() {
     );
   };
 
-  // MULTI-PARAMETER FILTER MATCHING LOOP LOGIC
   const filteredRows = rfqs.filter((item) => {
-    const computedRfqId = item.materialId ? `RFQ-${item.materialId.substring(0, 5).toUpperCase()}` : "";
-    const matchesRfqId = computedRfqId.toLowerCase().includes(filterRfqId.trim().toLowerCase());
+    const computedRfqId = (item.rfqId || "").toLowerCase();
+    const matchesRfqId = computedRfqId.includes(filterRfqId.trim().toLowerCase());
     const matchesItemNo = (item.itemNumber || "").toLowerCase().includes(filterItemNumber.trim().toLowerCase());
     const matchesDesc = (item.description || "").toLowerCase().includes(filterDescription.trim().toLowerCase());
     return matchesRfqId && matchesItemNo && matchesDesc;
@@ -260,24 +258,15 @@ export default function SupplierDashboard() {
 
   return (
     <div className="min-h-screen p-8 bg-slate-50">
-      {/* 1. DYNAMIC RESTRUCTURED HEADER BLOCKS TIMELINE */}
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-4">
         <div>
-          {/* Main Title Header: Supplier Name Only */}
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-            {profile?.companyName || "Vendor"}
-          </h1>
-          {/* Sub Header: Bidding Terminal Text */}
-          <h2 className="text-lg font-bold text-slate-600 mt-1">
-            Bidding Terminal
-          </h2>
-          {/* Tertiary Line: Supplier Code Stamp */}
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{profile?.companyName || "Vendor"}</h1>
+          <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
           <p className="text-xs text-slate-400 mt-1 font-medium">
             Supplier Code: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded ml-1">{currentSupplierNo}</span>
           </p>
         </div>
         
-        {/* ACTION UTILITY MANAGEMENT RUNTIME CONTROLS BAR */}
         <div className="flex items-center gap-2 w-full md:w-auto">
           <button
             onClick={() => setIsFilterModalOpen(true)}
@@ -285,7 +274,6 @@ export default function SupplierDashboard() {
           >
             🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
           </button>
-          
           <button
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
@@ -296,7 +284,6 @@ export default function SupplierDashboard() {
         </div>
       </header>
 
-      {/* MATERIALS ACTIONS MASTER QUEUE DATA GRID CONTAINER */}
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
           <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
@@ -325,33 +312,22 @@ export default function SupplierDashboard() {
               <tbody className="divide-y divide-slate-200 text-slate-800">
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-12 text-center text-slate-400">
-                      No material requests matched your filtering criteria.
-                    </td>
+                    <td colSpan={11} className="py-12 text-center text-slate-400">No material requests matched your criteria.</td>
                   </tr>
                 ) : (
                   filteredRows.map((item) => {
                     const isEditing = editingId === item.id;
-                    const computedRfqId = item.materialId ? `RFQ-${item.materialId.substring(0, 5).toUpperCase()}` : "—";
-                    
                     const matchingMaterialDoc = materialsMap[item.materialId];
                     const rawUploadedTimestamp = matchingMaterialDoc?.timestamp || null;
 
                     return (
                       <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
-                        
-                        {/* RFQ ID COLUMN */}
-                        <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-400 bg-slate-50/20">
-                          {computedRfqId}
-                        </td>
-
-                        {/* ITEM NUMBER COLUMN */}
+                        <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">{item.rfqId || "—"}</td>
                         <td className="py-4 px-6 font-mono font-medium text-slate-900">{item.itemNumber}</td>
                         <td className="py-4 px-6 max-w-xs truncate" title={item.description}>{item.description}</td>
                         <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                         <td className="py-4 px-6 text-slate-500">{item.uom}</td>
                         
-                        {/* Unit Bid Pricing */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -369,7 +345,6 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* Lead Time */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -384,7 +359,6 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* Supplier Notes */}
                         <td className="py-3 px-4">
                           {isEditing ? (
                             <input
@@ -401,36 +375,17 @@ export default function SupplierDashboard() {
                           )}
                         </td>
 
-                        {/* DATE LINE ITEM WAS UPLOADED */}
-                        <td className="py-3 px-6 whitespace-nowrap">
-                          {formatTimestamp(rawUploadedTimestamp, "dateOnly")}
-                        </td>
+                        <td className="py-3 px-6 whitespace-nowrap">{formatTimestamp(rawUploadedTimestamp, "dateOnly")}</td>
+                        <td className="py-3 px-6 text-xs">{formatTimestamp(item.timestamp, "fullTime")}</td>
 
-                        {/* Bid Proposal Timestamp Submission */}
-                        <td className="py-3 px-6 text-xs">
-                          {formatTimestamp(item.timestamp, "fullTime")}
-                        </td>
-
-                        {/* Controls */}
                         <td className="py-3 px-6 text-center whitespace-nowrap">
                           {isEditing ? (
                             <div className="flex items-center justify-center gap-2">
-                              <button
-                                onClick={() => handleSaveBid(item.id)}
-                                disabled={isSaving}
-                                className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
-                              >
-                                {isSaving ? "Saving..." : "Save"}
-                              </button>
-                              <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">
-                                Cancel
-                              </button>
+                              <button onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
+                              <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">Cancel</button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => startEditing(item)}
-                              className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                            >
+                            <button onClick={() => startEditing(item)} className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
                               {item.offeredPrice !== null ? "Edit Bid" : "Quote Price"}
                             </button>
                           )}
@@ -445,62 +400,30 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* FILTER PARAMETERS MODAL OVERLAY */}
+      {/* FILTER PARAMETERS MODAL */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
             <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
               <h3 className="text-md font-bold text-slate-900">Filter Procurement Items</h3>
-              <button 
-                type="button" 
-                onClick={clearFilterFields} 
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
-              >
-                Reset All
-              </button>
+              <button type="button" onClick={clearFilterFields} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Reset All</button>
             </div>
-            
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
-                <input
-                  type="text"
-                  value={filterRfqId}
-                  onChange={(e) => setFilterRfqId(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-mono"
-                  placeholder="e.g. RFQ-A12B"
-                />
+                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono" placeholder="e.g. PROJECT-1" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input
-                  type="text"
-                  value={filterItemNumber}
-                  onChange={(e) => setFilterItemNumber(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  placeholder="e.g. 1001-A"
-                />
+                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono" placeholder="e.g. 1001-A" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input
-                  type="text"
-                  value={filterDescription}
-                  onChange={(e) => setFilterDescription(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="e.g. Steel Pipe"
-                />
+                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Pipe" />
               </div>
             </div>
-
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
-              <button
-                type="button"
-                onClick={() => setIsFilterModalOpen(false)}
-                className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
-              >
-                Apply Active Parameters ({filteredRows.length} Rows Found)
-              </button>
+              <button type="button" onClick={() => setIsFilterModalOpen(false)} className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white hover:bg-blue-500">Apply Active Parameters ({filteredRows.length} Rows)</button>
             </div>
           </div>
         </div>

@@ -4,14 +4,14 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
-import { collection, writeBatch, doc, getDocs, query, orderBy, where, updateDoc, deleteDoc, setDoc } from "firebase/firestore";
+import { collection, writeBatch, doc, getDocs, query, orderBy, where, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 
 interface MaterialItem {
   id: string;
-  rfqId: string; // Manually keyed requisition / project number
+  rfqId: string; 
   itemNumber: string;
   description: string;
   quantity: number;
@@ -151,13 +151,13 @@ export default function AdminDashboard() {
           results.data.forEach((row: any) => {
             const newDocRef = doc(collection(db, "materials"));
             batch.set(newDocRef, {
-              rfqId: row["RFQ ID"] || row["rfqId"] || "REQ-UNASSIGNED", // Pull keyed reference from CSV column
+              rfqId: row["RFQ ID"] || row["rfqId"] || "REQ-UNASSIGNED", 
               itemNumber: row["Item"] || row["itemNumber"] || "UNKNOWN",
               description: row["Description"] || row["description"] || "",
               quantity: Number(row["Qty"] || row["quantity"] || 0),
               uom: row["UOM"] || row["uom"] || "EA",
               status: "Pending",
-              timestamp: new Date() // Sets creation upload date stamp
+              timestamp: new Date()
             });
           });
 
@@ -167,13 +167,13 @@ export default function AdminDashboard() {
         } catch (error) {
           console.error("CSV upload batch failed:", error);
           setFeedbackMessage("Failed to process data columns.");
-        } fillAll:
+        } finally {
           setIsUploading(false);
+        }
       },
     });
   };
 
-  // INLINE CRUD ACTIONS ENGINE
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
     setEditRfqId(item.rfqId || "");
@@ -192,7 +192,7 @@ export default function AdminDashboard() {
     try {
       const docRef = doc(db, "materials", id);
       await updateDoc(docRef, {
-        rfqId: editRfqId.trim(), // Committing the manual keyed field change
+        rfqId: editRfqId.trim(), 
         itemNumber: editItemNumber.trim(),
         description: editDescription.trim(),
         quantity: Number(editQuantity),
@@ -218,7 +218,18 @@ export default function AdminDashboard() {
     }
   };
 
-  // SOURCING RFQ DISPATCH LOGIC
+  const openSourcingModal = (item: MaterialItem) => {
+    setSelectedItem(item);
+    setSelectedSupplierNos([]);
+    setIsModalOpen(true);
+  };
+
+  const handleToggleSupplierSelection = (supplierNo: string) => {
+    setSelectedSupplierNos((prev) =>
+      prev.includes(supplierNo) ? prev.filter((no) => no !== supplierNo) : [...prev, supplierNo]
+    );
+  };
+
   const handleDispatchRFQ = async () => {
     if (!selectedItem || selectedSupplierNos.length === 0) return;
     setIsRouting(true);
@@ -230,7 +241,7 @@ export default function AdminDashboard() {
         const rfqDocRef = doc(collection(db, "rfq_routing"));
         batch.set(rfqDocRef, {
           materialId: selectedItem.id,
-          rfqId: selectedItem.rfqId || "—", // Stamping manual coded reference onto vendor payload layout
+          rfqId: selectedItem.rfqId || "—", 
           itemNumber: selectedItem.itemNumber,
           description: selectedItem.description,
           quantity: selectedItem.quantity,
@@ -240,7 +251,7 @@ export default function AdminDashboard() {
           offeredPrice: null,
           leadTime: null,
           supplierNote: "",
-          timestamp: null, // Cleared initially until vendor replies
+          timestamp: null, 
         });
       });
 
@@ -285,7 +296,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // EXCEL MASTER SPREADSHEET EXPORT
   const handleExportAllQuotesToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -336,7 +346,7 @@ export default function AdminDashboard() {
         });
 
         const row = worksheet.addRow({
-          rfqId: quote.rfqId || "—", // Maps keyed identifier instead of database hash value
+          rfqId: quote.rfqId || "—", 
           itemNo: quote.itemNumber || "—",
           desc: quote.description || "",
           qty: Number(quote.quantity || 0),
@@ -393,7 +403,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // CLIENT-SIDE FILTER SEARCH ENGINE MAPPING MATCH
   const filteredMaterials = materials.filter((item) => {
     const rfqField = (item.rfqId || "").toLowerCase();
     const itemNoField = (item.itemNumber || "").toLowerCase();
@@ -433,7 +442,6 @@ export default function AdminDashboard() {
           <p className="text-sm text-slate-500">Parse master material parameters and manage vendor distribution metrics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* FILTER CONSOLE BUTTON TRIGGER */}
           <button
             onClick={() => setIsFilterModalOpen(true)}
             className="text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
@@ -447,18 +455,8 @@ export default function AdminDashboard() {
           >
             {isExportingExcel ? "Generating Spreadsheet..." : "📊 Export All Quotes to Excel"}
           </button>
-          <button
-            onClick={() => router.push("/users")}
-            className="text-sm font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-md transition-all"
-          >
-            👤 User Accounts
-          </button>
-          <button
-            onClick={() => router.push("/suppliers")}
-            className="text-sm font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md transition-all"
-          >
-            🏢 Suppliers Directory
-          </button>
+          <button onClick={() => router.push("/users")} className="text-sm font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-md transition-all">👤 User Accounts</button>
+          <button onClick={() => router.push("/suppliers")} className="text-sm font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md transition-all">🏢 Suppliers Directory</button>
         </div>
       </header>
 
@@ -469,13 +467,7 @@ export default function AdminDashboard() {
           <p className="text-xs text-slate-500">Upload bulk CSV listings targeting Item, Description, Qty, and UOM parameters</p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleCSVUpload}
-            disabled={isUploading}
-            className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
-          />
+          <input type="file" accept=".csv" onChange={handleCSVUpload} disabled={isUploading} className="text-xs text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
           {feedbackMessage && <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded">{feedbackMessage}</span>}
         </div>
       </div>
@@ -508,132 +500,63 @@ export default function AdminDashboard() {
 
                   return (
                     <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditingRow ? 'bg-amber-50/40' : ''}`}>
-                      
-                      {/* MANUAL REQUISITION KEY FIELD ROW */}
                       <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">
                         {isEditingRow ? (
-                          <input
-                            type="text"
-                            value={editRfqId}
-                            onChange={(e) => setEditRfqId(e.target.value)}
-                            className="w-24 text-center text-xs rounded border border-slate-300 px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono uppercase font-bold"
-                            placeholder="e.g. PROJECT-1"
-                          />
+                          <input type="text" value={editRfqId} onChange={(e) => setEditRfqId(e.target.value)} className="w-24 text-center text-xs rounded border border-slate-300 px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono uppercase font-bold" placeholder="e.g. PROJECT-1" />
                         ) : (
                           item.rfqId || <span className="text-slate-300">—</span>
                         )}
                       </td>
-
                       <td className="py-4 px-6 font-mono font-medium text-slate-900">
                         {isEditingRow ? (
-                          <input
-                            type="text"
-                            value={editItemNumber}
-                            onChange={(e) => setEditItemNumber(e.target.value)}
-                            className="w-28 text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono font-medium"
-                          />
+                          <input type="text" value={editItemNumber} onChange={(e) => setEditItemNumber(e.target.value)} className="w-28 text-sm rounded border border-slate-300 px-2 py-1 font-mono font-medium" />
                         ) : (
                           item.itemNumber
                         )}
                       </td>
-
                       <td className="py-4 px-6 max-w-xs truncate" title={item.description}>
                         {isEditingRow ? (
-                          <input
-                            type="text"
-                            value={editDescription}
-                            onChange={(e) => setEditDescription(e.target.value)}
-                            className="w-full min-w-[180px] text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                          <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full min-w-[180px] text-sm rounded border border-slate-300 px-2 py-1" />
                         ) : (
                           item.description
                         )}
                       </td>
-
                       <td className="py-4 px-6 text-right font-semibold">
                         {isEditingRow ? (
-                          <input
-                            type="number"
-                            value={editQuantity}
-                            onChange={(e) => setEditQuantity(Number(e.target.value))}
-                            className="w-16 text-sm text-right rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-semibold"
-                          />
+                          <input type="number" value={editQuantity} onChange={(e) => setEditQuantity(Number(e.target.value))} className="w-16 text-sm text-right rounded border border-slate-300 px-2 py-1 font-semibold" />
                         ) : (
                           item.quantity
                         )}
                       </td>
-
                       <td className="py-4 px-6 text-slate-500">
                         {isEditingRow ? (
-                          <input
-                            type="text"
-                            value={editUom}
-                            onChange={(e) => setEditUom(e.target.value)}
-                            className="w-14 text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                          <input type="text" value={editUom} onChange={(e) => setEditUom(e.target.value)} className="w-14 text-sm rounded border border-slate-300 px-2 py-1" />
                         ) : (
                           item.uom
                         )}
                       </td>
-                      
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-bold ${
                           (item.quoteCount || 0) > 0 ? 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-600/20' : 'bg-slate-100 text-slate-400'
-                        }`}>
-                          {item.quoteCount || 0} Bid(s)
-                        </span>
+                        }`}>{item.quoteCount || 0} Bid(s)</span>
                       </td>
-
                       <td className="py-4 px-6 text-center">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           item.status === 'Pending' ? 'bg-yellow-50 text-yellow-800 ring-1 ring-yellow-600/20' : 'bg-blue-50 text-blue-800 ring-1 ring-blue-600/20'
                         }`}>{item.status}</span>
                       </td>
-
                       <td className="py-4 px-6 text-center whitespace-nowrap space-x-1.5">
                         {isEditingRow ? (
                           <>
-                            <button
-                              onClick={() => handleUpdateItemRow(item.id)}
-                              disabled={isSavingCrud}
-                              className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500"
-                            >
-                              {isSavingCrud ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              onClick={cancelEditingRow}
-                              className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              Cancel
-                            </button>
+                            <button onClick={() => handleUpdateItemRow(item.id)} disabled={isSavingCrud} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSavingCrud ? "Saving..." : "Save"}</button>
+                            <button onClick={cancelEditingRow} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
                           </>
                         ) : (
                           <>
-                            <button 
-                              onClick={() => openSourcingModal(item)} 
-                              className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                            >
-                              Source
-                            </button>
-                            <button 
-                              onClick={() => openQuotesViewerModal(item)}
-                              disabled={(item.quoteCount || 0) === 0}
-                              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-30"
-                            >
-                              Quotes
-                            </button>
-                            <button 
-                              onClick={() => startEditingRow(item)}
-                              className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                            >
-                              ✏️
-                            </button>
-                            <button 
-                              onClick={() => handleDeleteItemRow(item.id)}
-                              className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100"
-                            >
-                              🗑️
-                            </button>
+                            <button onClick={() => openSourcingModal(item)} className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100">Source</button>
+                            <button onClick={() => openQuotesViewerModal(item)} disabled={(item.quoteCount || 0) === 0} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-30">Quotes</button>
+                            <button onClick={() => startEditingRow(item)} className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100">✏️</button>
+                            <button onClick={() => handleDeleteItemRow(item.id)} className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-100">🗑️</button>
                           </>
                         )}
                       </td>
@@ -669,9 +592,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
               <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleDispatchRFQ} disabled={selectedSupplierNos.length === 0 || isRouting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:bg-blue-300">
-                {isRouting ? "Routing RFQs..." : `Dispatch to ${selectedSupplierNos.length} Vendor(s)`}
-              </button>
+              <button type="button" onClick={handleDispatchRFQ} disabled={selectedSupplierNos.length === 0 || isRouting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:bg-blue-300">{isRouting ? "Routing RFQs..." : `Dispatch to ${selectedSupplierNos.length} Vendor(s)`}</button>
             </div>
           </div>
         </div>
@@ -685,7 +606,6 @@ export default function AdminDashboard() {
               <h3 className="text-lg font-bold text-slate-900">Received Procurement Quotes</h3>
               <p className="text-xs text-slate-500 mt-1">Audit log for Item Requirement: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{selectedItem.itemNumber}</span></p>
             </div>
-
             <div className="overflow-y-auto flex-1 my-2 border border-slate-100 rounded bg-slate-50/50 min-h-[150px]">
               {isQuotesLoading ? (
                 <div className="p-12 text-center text-sm text-slate-500">Querying live logs...</div>
@@ -709,92 +629,47 @@ export default function AdminDashboard() {
                           <div>{getSupplierName(quote.supplierNo)}</div>
                           <span className="font-mono text-[10px] text-slate-400 font-bold block mt-0.5">Code: {quote.supplierNo}</span>
                         </td>
-                        <td className="py-3 px-4 text-right font-bold text-emerald-700 font-mono text-sm">
-                          ${quote.offeredPrice !== null ? quote.offeredPrice.toFixed(2) : "0.00"}
-                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-emerald-700 font-mono text-sm">${quote.offeredPrice !== null ? quote.offeredPrice.toFixed(2) : "0.00"}</td>
                         <td className="py-3 px-4 font-medium text-slate-800">{quote.leadTime || "—"}</td>
-                        <td className="py-3 px-4 text-slate-500 italic max-w-xs truncate" title={quote.supplierNote}>
-                          {quote.supplierNote || <span className="text-slate-300">None attached</span>}
-                        </td>
-                        <td className="py-3 px-4 font-medium text-slate-600 whitespace-nowrap">
-                          {formatTimestamp(quote.timestamp)}
-                        </td>
+                        <td className="py-3 px-4 text-slate-500 italic max-w-xs truncate" title={quote.supplierNote}>{quote.supplierNote || <span className="text-slate-300">None attached</span>}</td>
+                        <td className="py-3 px-4 font-medium text-slate-600 whitespace-nowrap">{formatTimestamp(quote.timestamp)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
-
             <div className="flex justify-end border-t border-slate-200 pt-4 mt-4">
-              <button 
-                type="button" 
-                onClick={() => { setIsQuotesModalOpen(false); setSelectedItem(null); }}
-                className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
-              >
-                Close Audit View
-              </button>
+              <button type="button" onClick={() => { setIsQuotesModalOpen(false); setSelectedItem(null); }} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-sm">Close Audit View</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* OVERLAY FILTER CRITERIA SLIDEOUT PANEL MODAL */}
+      {/* FILTER MODAL */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
             <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
               <h3 className="text-md font-bold text-slate-900">Filter Procurement Items</h3>
-              <button 
-                type="button" 
-                onClick={clearFilterFields} 
-                className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
-              >
-                Reset All
-              </button>
+              <button type="button" onClick={clearFilterFields} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Reset All</button>
             </div>
-            
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Keyed RFQ ID / Project Reference</label>
-                <input
-                  type="text"
-                  value={filterRfqId}
-                  onChange={(e) => setFilterRfqId(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 uppercase font-mono"
-                  placeholder="e.g. REQ-001"
-                />
+                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono" placeholder="e.g. REQ-001" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input
-                  type="text"
-                  value={filterItemNumber}
-                  onChange={(e) => setFilterItemNumber(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  placeholder="e.g. 1001-A"
-                />
+                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono" placeholder="e.g. 1001-A" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input
-                  type="text"
-                  value={filterDescription}
-                  onChange={(e) => setFilterDescription(e.target.value)}
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="e.g. Steel Plate"
-                />
+                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Plate" />
               </div>
             </div>
-
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
-              <button
-                type="button"
-                onClick={() => setIsFilterModalOpen(false)}
-                className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
-              >
-                Apply Filters ({filteredMaterials.length} Rows Found)
-              </button>
+              <button type="button" onClick={() => setIsFilterModalOpen(false)} className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white hover:bg-blue-500">Apply Filters ({filteredMaterials.length} Rows)</button>
             </div>
           </div>
         </div>
