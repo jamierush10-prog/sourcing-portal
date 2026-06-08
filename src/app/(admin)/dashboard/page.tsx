@@ -147,7 +147,7 @@ export default function AdminDashboard() {
           description: selectedItem.description,
           quantity: selectedItem.quantity,
           uom: selectedItem.uom,
-          supplierNo: supNo, // Stamped directly with short code key
+          supplierNo: supNo,
           status: "Pending",
           offeredPrice: null,
           leadTime: null,
@@ -178,15 +178,25 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Material Procurement Console</h1>
           <p className="text-sm text-slate-500">Parse master material parameters and assign vendor routing configurations</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* USER ACCOUNTS LINK */}
+          <button
+            onClick={() => router.push("/users")}
+            className="text-sm font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-md transition-colors"
+          >
+            👤 User Accounts
+          </button>
+          
+          {/* SUPPLIERS DIRECTORY LINK */}
           <button
             onClick={() => router.push("/suppliers")}
-            className="text-sm font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-3 py-1.5 rounded-md transition-colors"
+            className="text-sm font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md transition-colors"
           >
-            Manage Suppliers Directory →
+            🏢 Suppliers Directory
           </button>
-          <span className="inline-flex items-center rounded-md bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
-            System Administrator
+          
+          <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-800 ring-1 ring-inset ring-slate-600/10">
+            Admin Console
           </span>
         </div>
       </header>
