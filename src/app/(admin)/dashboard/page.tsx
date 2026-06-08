@@ -363,7 +363,7 @@ export default function AdminDashboard() {
         row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
         row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("price").numberFormat = "$#,##0.00";
+        row.getCell("price").numFmt = "$#,##0.00"; // Fixed compiler type assignment rule property
         row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
       });
 
