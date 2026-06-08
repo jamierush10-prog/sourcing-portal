@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 interface RFQItem {
   id: string;
   materialId: string;
+  rfqId: string; // <-- ADD THIS LINE RIGHT HERE
   itemNumber: string;
   description: string;
   quantity: number;
