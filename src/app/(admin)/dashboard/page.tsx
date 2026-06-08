@@ -368,7 +368,7 @@ export default function AdminDashboard() {
       });
 
       // Apply borders and striping to grid cells
-      worksheet.eachRow({ includeHeader: true }, (row, rowNumber) => {
+      worksheet.eachRow((row, rowNumber) => {
         row.eachCell((cell) => {
           cell.border = {
             top: { style: "thin", color: { argb: "CBD5E1" } },
