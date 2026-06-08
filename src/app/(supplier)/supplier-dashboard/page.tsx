@@ -128,7 +128,7 @@ export default function SupplierDashboard() {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
     } finally {
-      setIsSaving= false;
+      setIsSaving=(false);
     }
   };
 
