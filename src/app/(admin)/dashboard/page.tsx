@@ -143,7 +143,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Checkbox Selection Logic
+  // Checkbox Row Selection Logic
   const handleToggleRowSelect = (id: string) => {
     setSelectedItemIds(prev => 
       prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
@@ -161,6 +161,13 @@ export default function AdminDashboard() {
     }
   };
 
+  // RECONCILED: Modal Supplier Selection Toggle Logic Method
+  const handleToggleSupplierSelection = (supplierNo: string) => {
+    setSelectedSupplierNos((prev) =>
+      prev.includes(supplierNo) ? prev.filter((no) => no !== supplierNo) : [...prev, supplierNo]
+    );
+  };
+
   // BULK ACTION: FLAG SELECTED ITEMS AS HOT
   const handleMarkSelectedHot = async () => {
     if (selectedItemIds.length === 0) {
@@ -174,17 +181,13 @@ export default function AdminDashboard() {
         const docRef = doc(db, "materials", id);
         batch.update(docRef, { isHot: true });
 
-        // Update active routed RFQs concurrently so real-time snap-listeners capture status change
-        const targetedItems = materials.filter(m => m.id === id);
-        targetedItems.forEach(() => {
-          const rQuery = query(collection(db, "rfq_routing"), where("materialId", "==", id));
-          getDocs(rQuery).then((rSnapshot) => {
-            const innerBatch = writeBatch(db);
-            rSnapshot.forEach((rDoc) => {
-              innerBatch.update(rDoc.ref, { isHot: true });
-            });
-            innerBatch.commit();
+        const rQuery = query(collection(db, "rfq_routing"), where("materialId", "==", id));
+        getDocs(rQuery).then((rSnapshot) => {
+          const innerBatch = writeBatch(db);
+          rSnapshot.forEach((rDoc) => {
+            innerBatch.update(rDoc.ref, { isHot: true });
           });
+          innerBatch.commit();
         });
       });
 
@@ -239,7 +242,6 @@ export default function AdminDashboard() {
           });
         });
 
-        // Set status flag to sourced
         const materialDocRef = doc(db, "materials", itemId);
         batch.update(materialDocRef, { status: "Sourced" });
       });
@@ -454,6 +456,13 @@ export default function AdminDashboard() {
     );
   });
 
+  const clearFilterFields = () => {
+    setFilterRfqId("");
+    setFilterItemNumber("");
+    setFilterDescription("");
+    setFilterBuyer("");
+  };
+
   const getSupplierName = (supNo: string) => {
     const match = suppliers.find(s => s.supplierNo === supNo);
     return match ? match.companyName : `Vendor (${supNo})`;
@@ -469,12 +478,11 @@ export default function AdminDashboard() {
           <p className="text-sm text-slate-500">Bulk action workspace module logs tracking indexes</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* BULK SELECTION ACTION STRIP OPERATIONS CONTROL TRIGGER BUTTONS */}
           <button
             type="button"
             onClick={openBulkSourcingModal}
             disabled={selectedItemIds.length === 0}
-            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3.5 py-1.5 rounded-md hover:bg-blue-100 disabled:opacity-40 shadow-sm transition-all"
+            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md hover:bg-blue-100 disabled:opacity-40 shadow-sm transition-all"
           >
             🏢 Bulk Source Selected ({selectedItemIds.length})
           </button>
@@ -483,7 +491,7 @@ export default function AdminDashboard() {
             type="button"
             onClick={handleMarkSelectedHot}
             disabled={selectedItemIds.length === 0}
-            className="text-sm font-bold text-red-700 bg-red-50 border border-red-200 px-3.5 py-1.5 rounded-md hover:bg-red-100 disabled:opacity-40 shadow-sm transition-all animate-pulse"
+            className="text-sm font-bold text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-md hover:bg-red-100 disabled:opacity-40 shadow-sm transition-all"
           >
             🔥 Mark Selected Hot ({selectedItemIds.length})
           </button>
@@ -603,7 +611,12 @@ export default function AdminDashboard() {
               {suppliers.map((supplier) => (
                 <label key={supplier.id} className={`flex items-center justify-between p-3 rounded-md border text-sm cursor-pointer ${selectedSupplierNos.includes(supplier.supplierNo) ? 'border-blue-500 bg-blue-50/50' : 'border-slate-200 hover:bg-slate-50'}`}>
                   <div className="flex items-center gap-3">
-                    <input type="checkbox" checked={selectedSupplierNos.includes(supplier.supplierNo)} onChange={() => handleToggleSupplierSelection(supplier.supplierNo)} className="h-4 w-4 rounded border-slate-300 text-blue-600" />
+                    <input 
+                      type="checkbox" 
+                      checked={selectedSupplierNos.includes(supplier.supplierNo)} 
+                      onChange={() => handleToggleSupplierSelection(supplier.supplierNo)} 
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 cursor-pointer" 
+                    />
                     <div>
                       <p className="font-semibold text-slate-900">{supplier.companyName} <span className="font-mono font-bold text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-2">{supplier.supplierNo}</span></p>
                       <p className="text-xs text-slate-500">{supplier.email}</p>
@@ -615,6 +628,68 @@ export default function AdminDashboard() {
             <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
               <button type="button" className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setIsModalOpen(false)}>Cancel</button>
               <button type="button" onClick={handleDispatchBulkRFQs} disabled={selectedSupplierNos.length === 0 || isRouting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 disabled:bg-blue-300">{isRouting ? "Routing Matrix..." : `Dispatch RFQs`}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RECEIVED QUOTES AUDIT LOGGER */}
+      {isQuotesModalOpen && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
+            <div className="border-b border-slate-200 pb-3 mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Procurement Audit Log</h3>
+              <p className="text-xs text-slate-500 mt-1">Status check for Item Number Reference: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{selectedItem.itemNumber}</span></p>
+            </div>
+            <div className="overflow-y-auto flex-1 my-2 space-y-6 pr-1">
+              {isQuotesLoading ? (
+                <div className="p-12 text-center text-sm text-slate-500">Querying live logs...</div>
+              ) : (
+                <>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">1. Released Vendors (Pending Quotes)</h4>
+                    <div className="border border-slate-200 rounded-md bg-slate-50/50 overflow-hidden">
+                      {releasedVendors.length === 0 ? (
+                        <p className="p-4 text-xs text-slate-400 italic bg-white">No pending responses.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse text-xs">
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+                            {releasedVendors.map((vendor) => (
+                              <tr key={vendor.id}>
+                                <td className="py-2.5 px-4 font-semibold text-slate-800">{getSupplierName(vendor.supplierNo)}</td>
+                                <td className="py-2.5 px-4 font-mono text-slate-500">{vendor.supplierNo}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">2. Received Procurement Quotes</h4>
+                    <div className="border border-slate-200 rounded-md overflow-hidden">
+                      {receivedQuotes.length === 0 ? (
+                        <p className="p-4 text-xs text-slate-400 italic bg-white">No active bids received yet.</p>
+                      ) : (
+                        <table className="w-full text-left border-collapse text-xs">
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-700">
+                            {receivedQuotes.map((quote) => (
+                              <tr key={quote.id}>
+                                <td className="py-3 px-4 font-semibold text-slate-900">{getSupplierName(quote.supplierNo)}</td>
+                                <td className="py-3 px-4 text-right font-bold text-emerald-700">${quote.offeredPrice !== null ? quote.offeredPrice.toFixed(2) : "0.00"}</td>
+                                <td className="py-3 px-4 font-medium">{quote.leadTime || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-slate-200 pt-4 mt-4">
+              <button type="button" onClick={() => setIsQuotesModalOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Close</button>
             </div>
           </div>
         </div>
