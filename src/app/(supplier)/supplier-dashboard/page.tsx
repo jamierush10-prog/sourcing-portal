@@ -46,9 +46,8 @@ export default function SupplierDashboard() {
   const [vendorNotes, setVendorNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Export Progress Flags
+  // Export Progress Flag
   const [isExportingExcel, setIsExportingExcel] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
     if (!loading && (!profile || profile.role !== "supplier")) {
@@ -133,132 +132,186 @@ export default function SupplierDashboard() {
     }
   };
 
-  // REFACTORED AND BULLETPROOF PDF GENERATION ENGINE
-  const handleGeneratePdfQuote = async () => {
-    if (typeof window === "undefined") return;
-
-    setIsGeneratingPdf(true);
-    try {
-      // Import the module dynamically and resolve it directly as an active callable instance variable
-      // @ts-ignore
-      const html2pdfModule = await import("html2pdf.js");
-      const html2pdf = html2pdfModule.default || html2pdfModule;
-      
-      const element = document.getElementById("pdf-quote-content");
-      if (!element) {
-        alert("Unable to locate dashboard tables wrapper matching target layout container.");
-        setIsGeneratingPdf(false);
-        return;
-      }
-
-      const opt = {
-        margin: [0.4, 0.4, 0.4, 0.4],
-        filename: `Quote_Proposal_${profile?.companyName || "Vendor"}_${new Date().toISOString().substring(0,10)}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, logging: false },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
-      };
-
-      // Execute conversion cycle smoothly
-      await html2pdf().set(opt).from(element).save();
-    } catch (err) {
-      console.error("PDF engine initialization failure details:", err);
-      alert(`PDF System Notice: Failed to generate output stream canvas. Error info: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setIsGeneratingPdf(false);
-    }
-  };
-
+  // ADVANCED CORPORATE SHEET EXPORTER ENGINE (READY FOR PDF CONVERSION VIA EXCEL)
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("My Bids Workspace");
+      const worksheet = workbook.addWorksheet("Quote Proposal");
 
+      // Enforce raw grid line visibility parameters natively
+      worksheet.views = [{ showGridLines: true }];
+
+      // Define standard structural baseline data tracking columns
       worksheet.columns = [
-        { header: "RFQ ID", key: "rfqId", width: 15 },
-        { header: "Item #", key: "itemNo", width: 14 },
-        { header: "Description", key: "desc", width: 36 },
-        { header: "Quantity", key: "qty", width: 10 },
-        { header: "UOM", key: "uom", width: 8 },
-        { header: "Buyer", key: "buyer", width: 16 }, 
-        { header: "Your Price ($)", key: "price", width: 16 },
-        { header: "Lead Time", key: "leadTime", width: 16 },
-        { header: "Notes", key: "notes", width: 30 },
-        { header: "Date Uploaded", key: "dateUploaded", width: 16 },
-        { header: "Quote Date Submitted", key: "quoteDate", width: 22 }
+        { key: "rfqId", width: 16 },
+        { key: "itemNo", width: 14 },
+        { key: "desc", width: 38 },
+        { key: "qty", width: 10 },
+        { key: "uom", width: 8 },
+        { key: "buyer", width: 16 }, 
+        { key: "price", width: 18 },
+        { key: "total", width: 18 },
+        { key: "leadTime", width: 16 },
+        { key: "notes", width: 32 }
       ];
 
-      worksheet.getRow(1).height = 26;
-      worksheet.getRow(1).font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" } };
-      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } }; 
-      worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
+      // --- SECTION 1: POLISHED VENDOR BANNER & ROUTING ADDRESS STAMPS ---
+      worksheet.mergeCells("A2:C2");
+      const titleCell = worksheet.getCell("A2");
+      titleCell.value = (profile?.companyName || "VENDOR PROCUREMENT").toUpperCase();
+      titleCell.font = { name: "Segoe UI", size: 16, bold: true, color: { argb: "1E3A8A" } };
 
-      filteredRows.forEach((item) => {
-        const matchingMaterial = materialsMap[item.materialId];
-        const uploadedDateStr = matchingMaterial?.timestamp 
-          ? (matchingMaterial.timestamp.toDate ? matchingMaterial.timestamp.toDate() : new Date(matchingMaterial.timestamp)).toLocaleDateString()
-          : "—";
+      worksheet.mergeCells("A3:C3");
+      const subtitleCell = worksheet.getCell("A3");
+      subtitleCell.value = "Administrative Bidding Terminal Workspace Quote Proposal";
+      subtitleCell.font = { name: "Segoe UI", size: 10, italic: true, color: { argb: "475569" } };
 
-        const quoteDateStr = item.timestamp
-          ? (item.timestamp.toDate ? item.timestamp.toDate() : new Date(item.timestamp)).toLocaleString()
-          : "—";
+      // From Information Block Mapping
+      worksheet.getCell("A5").value = "FROM (Supplier Profile):";
+      worksheet.getCell("A5").font = { name: "Segoe UI", size: 9, bold: true, color: { argb: "475569" } };
+      
+      worksheet.getCell("A6").value = "Supplier Code:";
+      worksheet.getCell("A6").font = { name: "Segoe UI", size: 10, bold: true };
+      worksheet.getCell("B6").value = (profile as any)?.supplierNo || "—";
+      worksheet.getCell("B6").font = { name: "Segoe UI", size: 10, bold: true, color: { argb: "1E3A8A" } };
 
-        const row = worksheet.addRow({
-          rfqId: item.rfqId || "—",
-          itemNo: item.itemNumber || "",
-          desc: item.description || "",
-          qty: Number(item.quantity || 0),
-          uom: item.uom || "EA",
-          buyer: item.buyer || "—",
-          price: item.offeredPrice !== null ? Number(item.offeredPrice) : "Pending",
-          leadTime: item.leadTime || "—",
-          notes: item.supplierNote || "",
-          dateUploaded: uploadedDateStr,
-          quoteDate: item.status === "Completed" ? quoteDateStr : "—"
-        });
+      worksheet.getCell("A7").value = "Account Contact:";
+      worksheet.getCell("A7").font = { name: "Segoe UI", size: 10, bold: true };
+      worksheet.getCell("B7").value = (profile as any)?.contactName || (profile as any)?.name || "—";
+      worksheet.getCell("B7").font = { name: "Segoe UI", size: 10 };
 
-        row.height = 20;
-        row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("buyer").alignment = { horizontal: "left", vertical: "middle" };
-        if (item.offeredPrice !== null) {
-          row.getCell("price").numFmt = "$#,##0.00";
-          row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        } else {
-          row.getCell("price").alignment = { horizontal: "center", vertical: "middle" };
-        }
+      worksheet.getCell("A8").value = "Email Destination:";
+      worksheet.getCell("A8").font = { name: "Segoe UI", size: 10, bold: true };
+      worksheet.getCell("B8").value = profile?.email || "—";
+      worksheet.getCell("B8").font = { name: "Segoe UI", size: 10 };
+
+      // To Information Block Mapping (Austal USA Destination)
+      worksheet.getCell("G5").value = "TO (Procurement Destination):";
+      worksheet.getCell("G5").font = { name: "Segoe UI", size: 9, bold: true, color: { argb: "475569" } };
+
+      worksheet.getCell("G6").value = "Austal USA";
+      worksheet.getCell("G6").font = { name: "Segoe UI", size: 11, bold: true };
+      worksheet.getCell("G7").value = "100 Austal Way";
+      worksheet.getCell("G7").font = { name: "Segoe UI", size: 10 };
+      worksheet.getCell("G8").value = "Mobile, AL 36602";
+      worksheet.getCell("G8").font = { name: "Segoe UI", size: 10 };
+
+      // Date Stamp Marker Metrics
+      worksheet.getCell("G2").value = "DATE GENERATED:";
+      worksheet.getCell("G2").font = { name: "Segoe UI", size: 10, bold: true };
+      worksheet.getCell("H2").value = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      worksheet.getCell("H2").font = { name: "Segoe UI", size: 10 };
+
+      // --- SECTION 2: GRID TABLE HEADERS MATRIX MAPPING ---
+      const tableHeaders = ["RFQ ID", "Item #", "Material Description", "Qty", "UOM", "Buyer Assigned", "Offered Unit Price", "Extended Total", "Lead Time", "Supplier Notes"];
+      const headerRowIndex = 11;
+      const headerRow = worksheet.getRow(headerRowIndex);
+      headerRow.height = 26;
+
+      tableHeaders.forEach((text, idx) => {
+        const cell = headerRow.getCell(idx + 1);
+        cell.value = text;
+        cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = {
+          top: { style: "thin", color: { argb: "CBD5E1" } },
+          left: { style: "thin", color: { argb: "CBD5E1" } },
+          bottom: { style: "thin", color: { argb: "CBD5E1" } },
+          right: { style: "thin", color: { argb: "CBD5E1" } }
+        };
       });
 
-      worksheet.eachRow((row, rowNumber) => {
-        row.eachCell((cell) => {
+      // --- SECTION 3: INJECT MATRIX ROWS LOG LISTING ---
+      let currentRowIndex = 12;
+      filteredRows.forEach((item, index) => {
+        const matchingMaterial = materialsMap[item.materialId];
+        const row = worksheet.getRow(currentRowIndex);
+        row.height = 20;
+
+        row.getCell(1).value = item.rfqId || "—";
+        row.getCell(2).value = item.itemNumber || "—";
+        row.getCell(3).value = item.description || "";
+        row.getCell(4).value = Number(item.quantity || 0);
+        row.getCell(5).value = item.uom || "EA";
+        row.getCell(6).value = item.buyer || "—";
+        
+        // Pricing Unit Layout Format
+        row.getCell(7).value = item.offeredPrice !== null ? Number(item.offeredPrice) : 0;
+        
+        // Automated Extended Price Calculation Formula (= Qty * Unit Price)
+        row.getCell(8).value = { formula: `=D${currentRowIndex}*G${currentRowIndex}`, result: 0 };
+        
+        row.getCell(9).value = item.leadTime || "—";
+        row.getCell(10).value = item.supplierNote || "—";
+
+        // Alignments and Styling Formats
+        row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(6).alignment = { horizontal: "left", vertical: "middle" };
+        
+        row.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(7).numFmt = "$#,##0.00";
+        
+        row.getCell(8).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(8).numFmt = "$#,##0.00";
+        row.getCell(8).font = { name: "Segoe UI", bold: true, size: 10 };
+
+        row.getCell(9).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(10).alignment = { horizontal: "left", vertical: "middle" };
+
+        // Apply Borders and Light Zebra Striping Backdrops
+        for (let colIdx = 1; colIdx <= 10; colIdx++) {
+          const cell = row.getCell(colIdx);
+          if (colIdx !== 8) cell.font = { name: "Segoe UI", size: 10 };
           cell.border = {
             top: { style: "thin", color: { argb: "CBD5E1" } },
             left: { style: "thin", color: { argb: "CBD5E1" } },
             bottom: { style: "thin", color: { argb: "CBD5E1" } },
             right: { style: "thin", color: { argb: "CBD5E1" } }
           };
-          if (rowNumber > 1) {
-            cell.font = { name: "Segoe UI", size: 10 };
-            if (rowNumber % 2 === 0) {
-              cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
-            }
+          if (index % 2 === 1) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
           }
-        });
+        }
+
+        currentRowIndex++;
       });
 
+      // --- SECTION 4: GRAND PROJECT TOTALS BLOCK ---
+      const totalsRow = worksheet.getRow(currentRowIndex);
+      totalsRow.height = 24;
+      totalsRow.getCell(7).value = "Estimated Total:";
+      totalsRow.getCell(7).font = { name: "Segoe UI", bold: true, size: 10 };
+      totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+
+      const grandTotalCell = totalsRow.getCell(8);
+      // Continuous upper case spreadsheet parsing evaluation logic sequence hook
+      grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})`, result: 0 };
+      grandTotalCell.font = { name: "Segoe UI", bold: true, color: { argb: "1E3A8A" }, size: 11 };
+      grandTotalCell.alignment = { horizontal: "right", vertical: "middle" };
+      grandTotalCell.numFmt = "$#,##0.00";
+      grandTotalCell.border = {
+        top: { style: "thin", color: { argb: "000000" } },
+        bottom: { style: "double", color: { argb: "000000" } }
+      };
+
+      // Trigger standard browser stream download window block
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `Supplier_Bidding_Log_${new Date().toISOString().substring(0,10)}.xlsx`;
+      anchor.download = `Quote_Proposal_${profile?.companyName || "Vendor"}_${new Date().toISOString().substring(0,10)}.xlsx`;
       anchor.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("Spreadsheet save error:", err);
+      console.error("Excel generation tracking error:", err);
+      alert("Error building quote proposal template workbook mapping records.");
     } finally {
       setIsExportingExcel(false);
     }
@@ -301,8 +354,9 @@ export default function SupplierDashboard() {
   return (
     <div className="min-h-screen p-8 bg-slate-50">
       
-      <div id="pdf-quote-content" className="p-4 bg-transparent rounded">
+      <div className="p-4 bg-transparent rounded">
         
+        {/* TOP LEVEL LOGISTICS ROUTING SHIPYARD METADATA HEADER BANNER */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
@@ -316,6 +370,7 @@ export default function SupplierDashboard() {
             </div>
           </div>
           
+          {/* HARDCODED DESTINATION FOR PROPOSAL PACKETS SUBMITTALS ROUTING SHOWN GRAPHICALLY */}
           <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px]">
             <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
             <div className="text-slate-800 font-medium space-y-0.5">
@@ -326,7 +381,8 @@ export default function SupplierDashboard() {
           </div>
         </header>
 
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print" data-html2canvas-ignore="true">
+        {/* UTILITY BAR OPERATIONS STRIP */}
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={() => setIsFilterModalOpen(true)}
             className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
@@ -335,22 +391,15 @@ export default function SupplierDashboard() {
           </button>
           
           <button
-            onClick={handleGeneratePdfQuote}
-            disabled={isGeneratingPdf}
-            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
-          >
-            {isGeneratingPdf ? "Compiling Document..." : "📄 Generate PDF Quote"}
-          </button>
-
-          <button
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
-            className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-md hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-4 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
           >
-            {isExportingExcel ? "Generating Spreadsheet..." : "📊 Export Table to Excel"}
+            {isExportingExcel ? "Building Sheet Proposal..." : "📑 Generate Quote Proposal"}
           </button>
         </div>
 
+        {/* WORKSPACE LIVE REQUIREMENT TRACKING TABLE CARD */}
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
             <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
@@ -374,7 +423,7 @@ export default function SupplierDashboard() {
                     <th className="py-3 px-6">Notes</th>
                     <th className="py-3 px-6">Date Uploaded</th>
                     <th className="py-3 px-6">Quote Date</th>
-                    <th className="py-3 px-6 text-center no-print" data-html2canvas-ignore="true">Actions</th>
+                    <th className="py-3 px-6 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-slate-800">
@@ -404,7 +453,7 @@ export default function SupplierDashboard() {
                                 step="0.01"
                                 value={bidPrice}
                                 onChange={(e) => setBidPrice(e.target.value)}
-                                className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
+                                className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-bold"
                                 placeholder="0.00"
                               />
                             ) : item.offeredPrice !== null ? (
@@ -420,7 +469,7 @@ export default function SupplierDashboard() {
                                 type="text"
                                 value={leadTime}
                                 onChange={(e) => setLeadTime(e.target.value)}
-                                className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
+                                className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-medium"
                                 placeholder="e.g. 2 weeks"
                               />
                             ) : (
@@ -447,7 +496,7 @@ export default function SupplierDashboard() {
                           <td className="py-3 px-6 whitespace-nowrap">{formatTimestamp(rawUploadedTimestamp, "dateOnly")}</td>
                           <td className="py-3 px-6 text-xs">{formatTimestamp(item.timestamp, "fullTime")}</td>
 
-                          <td className="py-3 px-6 text-center whitespace-nowrap no-print" data-html2canvas-ignore="true">
+                          <td className="py-3 px-6 text-center whitespace-nowrap">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
@@ -470,7 +519,7 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* FILTER PARAMETERS OVERLAY MODAL */}
+      {/* FILTER PARAMETERS OVERLAY MODAL (WITH CRISP HIGH-CONTRAST TEXT-SLATE-900 BLACK FONTS) */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
