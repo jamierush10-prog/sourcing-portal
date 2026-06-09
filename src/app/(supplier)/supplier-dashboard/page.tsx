@@ -51,13 +51,16 @@ export default function SupplierDashboard() {
   }, [items, filterRfqId, filterItem, filterDesc]);
 
   const clearFilters = () => { setFilterRfqId(""); setFilterItem(""); setFilterDesc(""); };
+  
+  const isAllSelected = filteredItems.length > 0 && filteredItems.every(i => selectedItems.has(i.id));
+  const toggleSelectAll = () => isAllSelected ? setSelectedItems(new Set()) : setSelectedItems(new Set(filteredItems.map(i => i.id)));
   const toggleSelect = (id: string) => { const next = new Set(selectedItems); next.has(id) ? next.delete(id) : next.add(id); setSelectedItems(next); };
 
   const handleSaveBid = async (id: string) => {
     await updateDoc(doc(db, "rfq_routing", id), {
-      offeredPrice: parseFloat(bidPrice) || 0,
-      leadTime: bidLeadTime,
-      supplierNote: bidNotes,
+      offeredPrice: bidPrice ? parseFloat(bidPrice) : null,
+      leadTime: bidLeadTime || null,
+      supplierNote: bidNotes || null,
       status: "Completed",
       quoteDate: new Date(),
       quotedBy: profile?.email || "Supplier"
@@ -66,38 +69,77 @@ export default function SupplierDashboard() {
     setIsNoteModalOpen({isOpen: false, itemId: null});
   };
 
+  const exportSelectedToExcel = async () => {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Quote");
+    ws.columns = [
+      { header: "RFQ ID", key: "rfqId", width: 15 },
+      { header: "Item #", key: "item", width: 15 },
+      { header: "Description", key: "desc", width: 30 },
+      { header: "Price", key: "price", width: 10 },
+      { header: "Lead Time", key: "lt", width: 10 },
+      { header: "Date", key: "date", width: 15 },
+      { header: "By", key: "user", width: 15 }
+    ];
+    filteredItems.filter(i => selectedItems.has(i.id)).forEach(i => {
+      ws.addRow({ rfqId: i.rfqId, item: i.itemNumber, desc: i.description, price: i.offeredPrice, lt: i.leadTime, date: i.quoteDate?.toDate?.().toLocaleDateString(), user: i.quotedBy });
+    });
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement("a");
+    a.href = window.URL.createObjectURL(new Blob([buf]));
+    a.download = "Quote_Proposal.xlsx"; a.click();
+  };
+
+  useEffect(() => {
+    const p = profile as any;
+    if (!p?.supplierNo) return;
+    const q = query(collection(db, "rfq_routing"), where("supplierNo", "==", p.supplierNo));
+    return onSnapshot(q, (snap) => {
+      const list: RFQItem[] = [];
+      snap.forEach(d => list.push({ id: d.id, ...d.data() } as RFQItem));
+      setItems(list);
+    });
+  }, [profile]);
+
   return (
     <div className="min-h-screen bg-white p-8 text-black">
       <header className="border-b-4 border-black pb-4 mb-8">
         <h1 className="text-4xl font-black uppercase">Supplier Portal</h1>
+        <p className="text-sm font-bold">{profile?.companyName}</p>
       </header>
 
       <div className="flex gap-4 mb-6">
         <button onClick={() => setIsFilterModalOpen(true)} className="bg-black text-white px-6 py-2 font-black uppercase text-xs">Filter List</button>
+        <button onClick={exportSelectedToExcel} className="border-2 border-black px-6 py-2 font-black uppercase text-xs">Export Selected</button>
       </div>
 
-      <table className="w-full border-2 border-black text-left text-sm">
+      <table className="w-full border-2 border-black text-left text-xs">
         <thead className="bg-black text-white uppercase font-black">
           <tr>
+            <th className="p-3"><input type="checkbox" checked={isAllSelected} onChange={toggleSelectAll} /></th>
             <th className="p-3">RFQ ID</th>
+            <th className="p-3">Item #</th>
             <th className="p-3">Description</th>
             <th className="p-3">Price</th>
+            <th className="p-3">Lead Time</th>
+            <th className="p-3">Date</th>
+            <th className="p-3">By</th>
             <th className="p-3">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-black">
           {filteredItems.map(item => (
             <tr key={item.id}>
+              <td className="p-3"><input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleSelect(item.id)} /></td>
               <td className="p-3 font-bold">{item.rfqId}</td>
+              <td className="p-3 font-bold">{item.itemNumber}</td>
               <td className="p-3">{item.description}</td>
-              <td className="p-3">{editingId === item.id ? <input type="number" onChange={e => setBidPrice(e.target.value)} className="border p-1 w-20" /> : `$${item.offeredPrice || "0.00"}`}</td>
+              <td className="p-3">{editingId === item.id ? <input type="number" onChange={e => setBidPrice(e.target.value)} className="border p-1 w-16" /> : `$${item.offeredPrice || "0.00"}`}</td>
+              <td className="p-3">{editingId === item.id ? <input type="text" onChange={e => setBidLeadTime(e.target.value)} className="border p-1 w-16" /> : item.leadTime || "—"}</td>
+              <td className="p-3">{item.quoteDate?.toDate?.().toLocaleDateString() || "—"}</td>
+              <td className="p-3">{item.quotedBy || "—"}</td>
               <td className="p-3 flex gap-2">
-                <button 
-                  onClick={() => setIsNoteModalOpen({isOpen: true, itemId: item.id})}
-                  onMouseEnter={() => setIsNoteModalOpen({isOpen: true, itemId: item.id})}
-                  className={`px-3 py-1 font-bold border-2 border-black ${item.supplierNote ? 'bg-yellow-400' : 'bg-white'}`}>
-                  NOTES
-                </button>
+                <button onClick={() => setIsNoteModalOpen({isOpen: true, itemId: item.id})} className={`px-2 py-1 font-bold border-2 border-black ${item.supplierNote ? 'bg-yellow-400' : 'bg-white'}`}>NOTES</button>
                 {editingId === item.id ? <button onClick={() => handleSaveBid(item.id)} className="font-bold underline">SAVE</button> : <button onClick={() => setEditingId(item.id)} className="font-bold underline">QUOTE ONLINE</button>}
               </td>
             </tr>
@@ -114,6 +156,7 @@ export default function SupplierDashboard() {
           </div>
         </div>
       )}
+      
       {/* ... Filter Modal ... */}
     </div>
   );
