@@ -137,9 +137,8 @@ export default function SupplierDashboard() {
   const handleGeneratePdfQuote = async () => {
     setIsGeneratingPdf(true);
     try {
-      // Dynamic import prevents server-side rendering breaks with html2pdf canvas hooks
-      // @ts-ignore - html2pdf.js lacks native typings; bypass compile check for dynamic load
-const html2pdf = (await import("html2pdf.js" as any)).default;
+      // @ts-ignore - html2pdf.js lacks native typings; bypass compiler gate check safely
+      const html2pdf = (await import("html2pdf.js")).default;
       const element = document.getElementById("pdf-quote-content");
       
       if (!element) {
@@ -295,10 +294,10 @@ const html2pdf = (await import("html2pdf.js" as any)).default;
   return (
     <div className="min-h-screen p-8 bg-slate-50">
       
-      {/* THIS IS THE TARGET ID CONTAINER CAPTURED FOR CLIENT-SIDE GENERATION */}
+      {/* Dynamic wrapper targeted by the html2pdf exporter engine */}
       <div id="pdf-quote-content" className="p-4 bg-transparent rounded">
         
-        {/* RESTRUCTURED HEADER CONTAINING THE SIGNED IN USER INFORMATION & THE "TO:" METADATA */}
+        {/* Main Workspace Typography Blocks Layout */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
@@ -312,7 +311,7 @@ const html2pdf = (await import("html2pdf.js" as any)).default;
             </div>
           </div>
           
-          {/* THE MANDATORY WEB VIEW AND PDF EXPORT DESTINATION FOR "TO:" */}
+          {/* Austal USA Routing Address Stamp */}
           <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px]">
             <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
             <div className="text-slate-800 font-medium space-y-0.5">
@@ -323,7 +322,7 @@ const html2pdf = (await import("html2pdf.js" as any)).default;
           </div>
         </header>
 
-        {/* WORKSPACE UTILITY OPERATION CONTROLS PANEL */}
+        {/* Dashboard Actions Utility Control Strip (Excluded from canvas generation using data tags) */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print" data-html2canvas-ignore="true">
           <button
             onClick={() => setIsFilterModalOpen(true)}
@@ -349,7 +348,7 @@ const html2pdf = (await import("html2pdf.js" as any)).default;
           </button>
         </div>
 
-        {/* MATRIX GRID DATA TABLE LISTING CONTAINER */}
+        {/* Active Grid Logistics Logs Display Container */}
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
             <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
@@ -469,7 +468,7 @@ const html2pdf = (await import("html2pdf.js" as any)).default;
         </div>
       </div>
 
-      {/* FIXED SLIDEOUT MODAL INTERFACE WITH CRISP HIGH-CONTRAST BLACK FONT KEY IN INPUT STRINGS */}
+      {/* FILTER PARAMETERS OVERLAY MODAL (Now utilizing text-slate-900 high contrast typing configurations) */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
