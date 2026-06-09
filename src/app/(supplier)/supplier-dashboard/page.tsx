@@ -1,4 +1,3 @@
-// src/app/(supplier)/supplier-dashboard/page.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -34,13 +33,12 @@ export default function SupplierDashboard() {
   const [materialsMap, setMaterialsMap] = useState<Record<string, any>>({});
   const [isDataLoading, setIsDataLoading] = useState(false);
 
-  // Filter States
+  // States
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [filterRfqId, setFilterRfqId] = useState("");
   const [filterItemNumber, setFilterItemNumber] = useState("");
   const [filterDescription, setFilterDescription] = useState("");
   const [filterBuyer, setFilterBuyer] = useState("");
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [bidPrice, setBidPrice] = useState<string>("");
   const [leadTime, setLeadTime] = useState<string>("");
@@ -61,27 +59,24 @@ export default function SupplierDashboard() {
   }, [rfqs, filterRfqId, filterItemNumber, filterDescription, filterBuyer]);
 
   useEffect(() => {
-    if (!loading && (!profile || profile.role !== "supplier")) {
-      router.push("/login");
-    }
+    if (!loading && (!profile || profile.role !== "supplier")) router.push("/login");
   }, [profile, loading, router]);
 
   useEffect(() => {
     const supplierProfile = profile as any;
     if (loading || profile?.role !== "supplier" || !supplierProfile?.supplierNo) return;
-
     setIsDataLoading(true);
 
-    getDocs(collection(db, "materials")).then((materialsSnapshot) => {
+    getDocs(collection(db, "materials")).then((snap) => {
       const matMap: Record<string, any> = {};
-      materialsSnapshot.forEach((mDoc) => { matMap[mDoc.id] = mDoc.data(); });
+      snap.forEach((d) => { matMap[d.id] = d.data(); });
       setMaterialsMap(matMap);
     }).catch(console.error);
 
-    const routingQuery = query(collection(db, "rfq_routing"), where("supplierNo", "==", supplierProfile.supplierNo));
-    const unsubscribe = onSnapshot(routingQuery, (snapshot) => {
+    const q = query(collection(db, "rfq_routing"), where("supplierNo", "==", supplierProfile.supplierNo));
+    const unsubscribe = onSnapshot(q, (snap) => {
       const list: RFQItem[] = [];
-      snapshot.forEach((doc) => { list.push({ id: doc.id, ...doc.data() } as RFQItem); });
+      snap.forEach((d) => { list.push({ id: d.id, ...d.data() } as RFQItem); });
       setRfqs(list);
       setIsDataLoading(false);
     });
@@ -111,29 +106,26 @@ export default function SupplierDashboard() {
     setIsGeneratingProposal(true);
     try {
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Quote Proposal");
+      const ws = workbook.addWorksheet("Quote");
       
-      // Header Section
-      worksheet.mergeCells("A2:C2");
-      worksheet.getCell("A2").value = (profile?.companyName || "VENDOR").toUpperCase();
-      worksheet.getCell("A2").font = { size: 16, bold: true, color: { argb: "1E3A8A" } };
-      worksheet.getCell("A6").value = `Supplier ID: ${(profile as any)?.supplierNo || "N/A"}`;
-      worksheet.getCell("A7").value = `Contact: ${(profile as any)?.contactName || (profile as any)?.name || "N/A"}`;
+      ws.getCell("A2").value = (profile?.companyName || "VENDOR").toUpperCase();
+      ws.getCell("A2").font = { size: 16, bold: true };
+      ws.getCell("A4").value = `Supplier ID: ${(profile as any)?.supplierNo || "N/A"}`;
+      ws.getCell("A5").value = `Contact: ${(profile as any)?.contactName || "N/A"}`;
+
+      ws.getRow(11).values = ["RFQ ID", "Item #", "Description", "Qty", "Price", "Total"];
       
-      // Table
-      const headers = ["RFQ ID", "Item #", "Description", "Qty", "Price", "Total"];
-      worksheet.getRow(11).values = headers;
       filteredRows.forEach((item, i) => {
-        const row = worksheet.addRow([item.rfqId, item.itemNumber, item.description, item.quantity, item.offeredPrice || 0, { formula: `=D${12+i}*E${12+i}` }]);
-        row.eachCell((c) => c.alignment = { vertical: "center", horizontal: "center" });
+        const row = ws.addRow([item.rfqId, item.itemNumber, item.description, item.quantity, item.offeredPrice || 0, { formula: `=D${12+i}*E${12+i}` }]);
+        row.eachCell((c) => c.alignment = { vertical: "middle", horizontal: "center" });
       });
 
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const anchor = document.createElement("a");
-      anchor.href = window.URL.createObjectURL(blob);
-      anchor.download = `Quote_${profile?.companyName || "Proposal"}.xlsx`;
-      anchor.click();
+      const buf = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
+      a.href = window.URL.createObjectURL(blob);
+      a.download = "Quote.xlsx";
+      a.click();
     } finally { setIsGeneratingProposal(false); }
   };
 
@@ -170,9 +162,7 @@ export default function SupplierDashboard() {
               <td className="p-3">{item.description}</td>
               <td className="p-3">{item.quantity}</td>
               <td className="p-3">${item.offeredPrice?.toFixed(2) || "0.00"}</td>
-              <td className="p-3">
-                <button onClick={() => setEditingId(item.id)} className="text-blue-600 font-bold text-xs">Edit</button>
-              </td>
+              <td className="p-3"><button onClick={() => setEditingId(item.id)} className="text-blue-600 font-bold text-xs">Edit</button></td>
             </tr>
           ))}
         </tbody>
