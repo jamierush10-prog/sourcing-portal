@@ -140,11 +140,11 @@ export default function SupplierDashboard() {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
     } finally {
-      // Fix: Call hook setter function cleanly to resolve the un-terminated tag evaluation break
       setIsSaving(false);
     }
   };
 
+  // CLEANLY CONFIGURED ADVANCED EXCEL GENERATION EXPORTER
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -220,12 +220,6 @@ export default function SupplierDashboard() {
         cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
         cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.border = {
-          top: { style: "thin", color: { argb: "CBD5E1" } },
-          left: { style: "thin", color: { argb: "CBD5E1" } },
-          bottom: { style: "thin", color: { argb: "CBD5E1" } },
-          right: { style: "thin", color: { argb: "CBD5E1" } }
-        };
       });
 
       let currentRowIndex = 12;
@@ -240,7 +234,7 @@ export default function SupplierDashboard() {
         row.getCell(5).value = item.uom || "EA";
         row.getCell(6).value = item.buyer || "—";
         row.getCell(7).value = item.offeredPrice !== null ? Number(item.offeredPrice) : 0;
-        row.getCell(8).value = { formula: `=D${currentRowIndex}*G${currentRowIndex}`, result: 0 };
+        row.getCell(8).value = { formula: `=D${currentRowIndex}*G${currentRowIndex}` };
         row.getCell(9).value = item.leadTime || "—";
         row.getCell(10).value = item.supplierNote || "—";
 
@@ -258,17 +252,24 @@ export default function SupplierDashboard() {
         row.getCell(9).alignment = { horizontal: "left", vertical: "middle" };
         row.getCell(10).alignment = { horizontal: "left", vertical: "middle" };
 
+        // Clean cell looping style configuration rules updates
         for (let colIdx = 1; colIdx <= 10; colIdx++) {
           const cell = row.getCell(colIdx);
           if (colIdx !== 8) cell.font = { name: "Segoe UI", size: 10 };
+          
           cell.border = {
             top: { style: "thin", color: { argb: "CBD5E1" } },
             left: { style: "thin", color: { argb: "CBD5E1" } },
             bottom: { style: "thin", color: { argb: "CBD5E1" } },
             right: { style: "thin", color: { argb: "CBD5E1" } }
           };
+          
           if (index % 2 === 1) {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
+            cell.fill = { 
+              type: "pattern", 
+              pattern: "solid", 
+              fgColor: { argb: "F8FAFC" } 
+            };
           }
         }
         currentRowIndex++;
@@ -281,10 +282,11 @@ export default function SupplierDashboard() {
       totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
 
       const grandTotalCell = totalsRow.getCell(8);
-      grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})`, result: 0 };
+      grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})` };
       grandTotalCell.font = { name: "Segoe UI", bold: true, color: { argb: "1E3A8A" }, size: 11 };
       grandTotalCell.alignment = { horizontal: "right", vertical: "middle" };
       grandTotalCell.numFmt = "$#,##0.00";
+      
       grandTotalCell.border = {
         top: { style: "thin", color: { argb: "000000" } },
         bottom: { style: "double", color: { argb: "000000" } }
