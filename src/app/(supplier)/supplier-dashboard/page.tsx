@@ -133,7 +133,6 @@ export default function SupplierDashboard() {
     }
   };
 
-  // DYNAMIC COMPRESSED CLIENT PDF QUOTE COMPILER RUNTIME ENGINE
   const handleGeneratePdfQuote = async () => {
     setIsGeneratingPdf(true);
     try {
@@ -294,10 +293,8 @@ export default function SupplierDashboard() {
   return (
     <div className="min-h-screen p-8 bg-slate-50">
       
-      {/* Dynamic wrapper targeted by the html2pdf exporter engine */}
       <div id="pdf-quote-content" className="p-4 bg-transparent rounded">
         
-        {/* Main Workspace Typography Blocks Layout */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
           <div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
@@ -306,12 +303,12 @@ export default function SupplierDashboard() {
             <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
             <div className="text-xs text-slate-500 mt-2 space-y-0.5">
               <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
-              <p><span className="font-semibold text-slate-700">Account Contact:</span> {profile?.name || "Active Session User"}</p>
+              {/* Fix: Explicitly cast profile to any inside JSX lookup to prevent interface property name compiler flags */}
+              <p><span className="font-semibold text-slate-700">Account Contact:</span> {(profile as any)?.contactName || (profile as any)?.name || "Active Session User"}</p>
               <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
             </div>
           </div>
           
-          {/* Austal USA Routing Address Stamp */}
           <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px]">
             <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
             <div className="text-slate-800 font-medium space-y-0.5">
@@ -322,7 +319,6 @@ export default function SupplierDashboard() {
           </div>
         </header>
 
-        {/* Dashboard Actions Utility Control Strip (Excluded from canvas generation using data tags) */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print" data-html2canvas-ignore="true">
           <button
             onClick={() => setIsFilterModalOpen(true)}
@@ -348,7 +344,6 @@ export default function SupplierDashboard() {
           </button>
         </div>
 
-        {/* Active Grid Logistics Logs Display Container */}
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
             <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
@@ -468,7 +463,7 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* FILTER PARAMETERS OVERLAY MODAL (Now utilizing text-slate-900 high contrast typing configurations) */}
+      {/* FILTER PARAMETERS OVERLAY MODAL */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
