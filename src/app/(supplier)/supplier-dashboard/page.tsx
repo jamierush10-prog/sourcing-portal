@@ -20,6 +20,8 @@ interface RFQItem {
   supplierNote: string;
   status: "Pending" | "Completed";
   supplierNo: string;
+  quoteDate?: any; // Added for tracking
+  quotedBy?: string; // Added for tracking
 }
 
 export default function SupplierDashboard() {
@@ -47,15 +49,17 @@ export default function SupplierDashboard() {
     );
   }, [items, filterRfqId, filterItem, filterDesc]);
 
-  // Toggle logic for Select All (filtered only)
+  const clearFilters = () => {
+    setFilterRfqId("");
+    setFilterItem("");
+    setFilterDesc("");
+  };
+
   const isAllSelected = filteredItems.length > 0 && filteredItems.every(i => selectedItems.has(i.id));
 
   const toggleSelectAll = () => {
-    if (isAllSelected) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(filteredItems.map(i => i.id)));
-    }
+    if (isAllSelected) setSelectedItems(new Set());
+    else setSelectedItems(new Set(filteredItems.map(i => i.id)));
   };
 
   const toggleSelect = (id: string) => {
@@ -69,7 +73,9 @@ export default function SupplierDashboard() {
       offeredPrice: parseFloat(bidPrice) || 0,
       leadTime: bidLeadTime,
       supplierNote: bidNotes,
-      status: "Completed"
+      status: "Completed",
+      quoteDate: new Date(),
+      quotedBy: profile?.email || "Supplier"
     });
     setEditingId(null);
   };
@@ -81,22 +87,25 @@ export default function SupplierDashboard() {
       { header: "RFQ ID", key: "rfqId", width: 15 },
       { header: "Item #", key: "item", width: 15 },
       { header: "Description", key: "desc", width: 40 },
-      { header: "Qty", key: "qty", width: 10 },
       { header: "Price", key: "price", width: 15 },
       { header: "Lead Time", key: "lt", width: 15 },
-      { header: "Notes", key: "notes", width: 30 }
+      { header: "Date Quoted", key: "date", width: 20 },
+      { header: "Quoted By", key: "user", width: 20 }
     ];
     
     filteredItems.filter(i => selectedItems.has(i.id)).forEach(i => {
-      ws.addRow({ rfqId: i.rfqId, item: i.itemNumber, desc: i.description, qty: i.quantity, price: i.offeredPrice, lt: i.leadTime, notes: i.supplierNote });
+      ws.addRow({ 
+        rfqId: i.rfqId, item: i.itemNumber, desc: i.description, 
+        price: i.offeredPrice, lt: i.leadTime, 
+        date: i.quoteDate?.toDate?.().toLocaleDateString() || "—",
+        user: i.quotedBy || "—"
+      });
     });
     
     const buf = await wb.xlsx.writeBuffer();
     const url = window.URL.createObjectURL(new Blob([buf]));
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "Quote_Proposal.xlsx";
-    a.click();
+    a.href = url; a.download = "Quote_Proposal.xlsx"; a.click();
   };
 
   useEffect(() => {
@@ -135,7 +144,8 @@ export default function SupplierDashboard() {
             <th className="p-3">Description</th>
             <th className="p-3">Price</th>
             <th className="p-3">Lead Time</th>
-            <th className="p-3">Notes</th>
+            <th className="p-3">Quote Date</th>
+            <th className="p-3">Quoted By</th>
             <th className="p-3">Action</th>
           </tr>
         </thead>
@@ -146,18 +156,11 @@ export default function SupplierDashboard() {
               <td className="p-3 font-bold">{item.rfqId}</td>
               <td className="p-3 font-bold">{item.itemNumber}</td>
               <td className="p-3">{item.description}</td>
-              <td className="p-3">
-                {editingId === item.id ? <input type="number" onChange={e => setBidPrice(e.target.value)} className="border p-1 w-20" /> : `$${item.offeredPrice || "0.00"}`}
-              </td>
-              <td className="p-3">
-                {editingId === item.id ? <input type="text" onChange={e => setBidLeadTime(e.target.value)} className="border p-1 w-20" /> : item.leadTime || "—"}
-              </td>
-              <td className="p-3">
-                {editingId === item.id ? <input type="text" onChange={e => setBidNotes(e.target.value)} className="border p-1 w-32" /> : item.supplierNote || "—"}
-              </td>
-              <td className="p-3">
-                {editingId === item.id ? <button onClick={() => handleInlineSave(item.id)} className="font-bold underline">SAVE</button> : <button onClick={() => setEditingId(item.id)} className="font-bold underline">QUOTE ONLINE</button>}
-              </td>
+              <td className="p-3">{editingId === item.id ? <input type="number" onChange={e => setBidPrice(e.target.value)} className="border p-1 w-20" /> : `$${item.offeredPrice || "0.00"}`}</td>
+              <td className="p-3">{editingId === item.id ? <input type="text" onChange={e => setBidLeadTime(e.target.value)} className="border p-1 w-20" /> : item.leadTime || "—"}</td>
+              <td className="p-3 text-xs">{item.quoteDate?.toDate?.().toLocaleDateString() || "—"}</td>
+              <td className="p-3 text-xs">{item.quotedBy || "—"}</td>
+              <td className="p-3">{editingId === item.id ? <button onClick={() => handleInlineSave(item.id)} className="font-bold underline">SAVE</button> : <button onClick={() => setEditingId(item.id)} className="font-bold underline">QUOTE ONLINE</button>}</td>
             </tr>
           ))}
         </tbody>
@@ -167,10 +170,13 @@ export default function SupplierDashboard() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
           <div className="bg-white p-8 border-4 border-black w-96">
             <h2 className="font-black mb-4">FILTER ITEMS</h2>
-            <input placeholder="RFQ ID" className="w-full border-2 p-2 mb-2" onChange={e => setFilterRfqId(e.target.value)} />
-            <input placeholder="Item #" className="w-full border-2 p-2 mb-2" onChange={e => setFilterItem(e.target.value)} />
-            <input placeholder="Description" className="w-full border-2 p-2 mb-4" onChange={e => setFilterDesc(e.target.value)} />
-            <button onClick={() => setIsFilterModalOpen(false)} className="w-full bg-black text-white py-2 font-bold">APPLY</button>
+            <input placeholder="RFQ ID" className="w-full border-2 p-2 mb-2" value={filterRfqId} onChange={e => setFilterRfqId(e.target.value)} />
+            <input placeholder="Item #" className="w-full border-2 p-2 mb-2" value={filterItem} onChange={e => setFilterItem(e.target.value)} />
+            <input placeholder="Description" className="w-full border-2 p-2 mb-4" value={filterDesc} onChange={e => setFilterDesc(e.target.value)} />
+            <div className="flex gap-2">
+                <button onClick={clearFilters} className="w-1/2 border-2 border-black py-2 font-bold hover:bg-slate-100">CLEAR</button>
+                <button onClick={() => setIsFilterModalOpen(false)} className="w-1/2 bg-black text-white py-2 font-bold">APPLY</button>
+            </div>
           </div>
         </div>
       )}
