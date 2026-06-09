@@ -47,8 +47,9 @@ export default function SupplierDashboard() {
   const [vendorNotes, setVendorNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Export Progress Flag
+  // Export Progress Flags
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
 
   useEffect(() => {
     if (!loading && (!profile || profile.role !== "supplier")) {
@@ -63,7 +64,6 @@ export default function SupplierDashboard() {
 
     setIsDataLoading(true);
 
-    // 1. Establish master descriptive cache cross-references
     getDocs(collection(db, "materials")).then((materialsSnapshot) => {
       const matMap: Record<string, any> = {};
       materialsSnapshot.forEach((mDoc) => {
@@ -72,7 +72,6 @@ export default function SupplierDashboard() {
       setMaterialsMap(matMap);
     }).catch(err => console.error("Error setting up lookup maps:", err));
 
-    // 2. Open an active network query stream listener targeted specifically to this vendor's lines
     const routingQuery = query(
       collection(db, "rfq_routing"),
       where("supplierNo", "==", supplierProfile.supplierNo)
@@ -134,7 +133,6 @@ export default function SupplierDashboard() {
         status: "Completed",
         timestamp: new Date()
       });
-
       setEditingId(null);
     } catch (err) {
       console.error("Failed to commit supplier bid data:", err);
@@ -144,9 +142,84 @@ export default function SupplierDashboard() {
     }
   };
 
-  // CORRECTED EXCEL PROP LISTING UTILITY FORMAT MATRICES
-  const handleExportTableToExcel = async () => {
+  // STANDARD RAW DATA EXCEL EXPORTER
+  const handleExportRawExcel = async () => {
     setIsExportingExcel(true);
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Bids Workspace Data");
+
+      worksheet.views = [{ showGridLines: true }];
+
+      worksheet.columns = [
+        { header: "RFQ ID", key: "rfqId", width: 16 },
+        { header: "Item #", key: "itemNo", width: 14 },
+        { header: "Description", key: "desc", width: 36 },
+        { header: "Quantity", key: "qty", width: 10 },
+        { header: "UOM", key: "uom", width: 8 },
+        { header: "Buyer Assigned", key: "buyer", width: 16 }, 
+        { header: "Your Offered Price ($)", key: "price", width: 20 },
+        { header: "Lead Time", key: "leadTime", width: 16 },
+        { header: "Supplier Notes", key: "notes", width: 32 }
+      ];
+
+      worksheet.getRow(1).height = 26;
+      worksheet.getRow(1).font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
+      worksheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "334155" } }; // Charcoal Header
+      worksheet.getRow(1).alignment = { horizontal: "center", vertical: "middle" };
+
+      filteredRows.forEach((item, index) => {
+        const row = worksheet.addRow({
+          rfqId: item.rfqId || "—",
+          itemNo: item.itemNumber || "—",
+          desc: item.description || "",
+          qty: Number(item.quantity || 0),
+          uom: item.uom || "EA",
+          buyer: item.buyer || "—",
+          price: item.offeredPrice !== null ? Number(item.offeredPrice) : 0,
+          leadTime: item.leadTime || "—",
+          notes: item.supplierNote || ""
+        });
+
+        row.height = 20;
+        row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell("price").numFmt = "$#,##0.00";
+
+        row.eachCell((cell) => {
+          cell.font = { name: "Segoe UI", size: 10 };
+          cell.border = {
+            top: { style: "thin", color: { argb: "CBD5E1" } },
+            left: { style: "thin", color: { argb: "CBD5E1" } },
+            bottom: { style: "thin", color: { argb: "CBD5E1" } },
+            right: { style: "thin", color: { argb: "CBD5E1" } }
+          };
+          if (index % 2 === 1) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
+          }
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `Supplier_Data_Export_${new Date().toISOString().substring(0,10)}.xlsx`;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Raw excel export error:", err);
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
+  // FORMATTED PROPOSAL EXPORTER
+  const handleExportTableToExcel = async () => {
+    setIsGeneratingProposal(true);
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Quote Proposal");
@@ -219,8 +292,6 @@ export default function SupplierDashboard() {
         cell.value = text;
         cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
-        
-        // FIXED: Corrected vertical property type mapping to use 'middle' instead of 'center'
         cell.alignment = { horizontal: "center", vertical: "middle" };
       });
 
@@ -240,7 +311,6 @@ export default function SupplierDashboard() {
         row.getCell(9).value = item.leadTime || "—";
         row.getCell(10).value = item.supplierNote || "—";
 
-        // FIXED: Corrected vertical alignments across table body cells
         row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
         row.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
         row.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
@@ -299,7 +369,7 @@ export default function SupplierDashboard() {
       console.error("Excel generation tracking error:", err);
       alert("Error building quote proposal template workbook mapping records.");
     } finally {
-      setIsExportingExcel(false);
+      setIsGeneratingProposal(false);
     }
   };
 
@@ -341,26 +411,15 @@ export default function SupplierDashboard() {
     <div className="min-h-screen p-8 bg-slate-50">
       <div className="p-4 bg-transparent rounded">
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
-          <div className="w-full md:w-auto flex flex-col sm:flex-row sm:items-start justify-between sm:gap-12 md:gap-0">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-                {profile?.companyName || "Vendor Procurement"}
-              </h1>
-              <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
-              <div className="text-xs text-slate-500 mt-2 space-y-0.5">
-                <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
-                <p><span className="font-semibold text-slate-700">Account Contact:</span> {(profile as any)?.contactName || (profile as any)?.name || "Active Session User"}</p>
-                <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
-              </div>
-            </div>
-            <div className="mt-4 sm:mt-1">
-              <button
-                type="button"
-                onClick={handleSupplierLogout}
-                className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition-all shadow-sm"
-              >
-                🚪 Secure Logout
-              </button>
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+              {profile?.companyName || "Vendor Procurement"}
+            </h1>
+            <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
+            <div className="text-xs text-slate-500 mt-2 space-y-0.5">
+              <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
+              <p><span className="font-semibold text-slate-700">Account Contact:</span> {(profile as any)?.contactName || (profile as any)?.name || "Active Session User"}</p>
+              <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
             </div>
           </div>
           <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px] ml-auto md:ml-0">
@@ -373,22 +432,45 @@ export default function SupplierDashboard() {
           </div>
         </header>
 
-        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => setIsFilterModalOpen(true)}
-            className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
-          >
-            🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
-          </button>
-          <button
-            type="button"
-            onClick={handleExportTableToExcel}
-            disabled={isExportingExcel}
-            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-4 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
-          >
-            {isExportingExcel ? "Building Sheet Proposal..." : "📑 Generate Quote Proposal"}
-          </button>
+        {/* ALIGNED UTILITY ACTION ROW INCORPORATING LOGOUT AND EXCEL CONTROLS */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 bg-slate-100/60 p-2.5 rounded-lg border border-slate-200/80">
+          <div>
+            <button
+              type="button"
+              onClick={() => setIsFilterModalOpen(true)}
+              className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
+            >
+              🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
+            </button>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportRawExcel}
+              disabled={isExportingExcel}
+              className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-md hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
+            >
+              {isExportingExcel ? "Exporting Matrix..." : "📊 Export to Excel"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportTableToExcel}
+              disabled={isGeneratingProposal}
+              className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-4 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
+            >
+              {isGeneratingProposal ? "Building Sheet Proposal..." : "📑 Generate Quote Proposal"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSupplierLogout}
+              className="text-sm font-bold text-red-600 hover:text-red-800 bg-white hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-md transition-all shadow-sm"
+            >
+              {"🚪 Secure Logout"}
+            </button>
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
@@ -425,7 +507,7 @@ export default function SupplierDashboard() {
                     filteredRows.map((item) => {
                       const isEditing = editingId === item.id;
                       const matchingMaterialDoc = materialsMap[item.materialId];
-                      const rawUploadedTimestamp = matchingMaterialDoc?.timestamp || null;
+                      const rawUploadedTimestamp = materialsMap[item.materialId]?.timestamp || null;
 
                       return (
                         <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
@@ -484,6 +566,63 @@ export default function SupplierDashboard() {
           </div>
         </div>
       </div>
+
+      {/* FILTER PARAMETERS OVERLAY MODAL */}
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
+            <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
+              <h3 className="text-md font-bold text-slate-900">Filter Procurement Items</h3>
+              <button type="button" onClick={clearFilterFields} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Reset All</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
+                <input 
+                  type="text" 
+                  value={filterRfqId} 
+                  onChange={(e) => setFilterRfqId(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. PROJECT-1" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
+                <input 
+                  type="text" 
+                  value={filterItemNumber} 
+                  onChange={(e) => setFilterItemNumber(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. 1001-A" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
+                <input 
+                  type="text" 
+                  value={filterDescription} 
+                  onChange={(e) => setFilterDescription(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. Steel Pipe" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
+                <input 
+                  type="text" 
+                  value={filterBuyer} 
+                  onChange={(e) => setFilterBuyer(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. James Rush" 
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
+              <button type="button" onClick={() => setIsFilterModalOpen(false)} className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white hover:bg-blue-500">Apply Active Parameters ({filteredRows.length} Rows)</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
