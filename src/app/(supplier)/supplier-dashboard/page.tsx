@@ -46,8 +46,9 @@ export default function SupplierDashboard() {
   const [vendorNotes, setVendorNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Spreadsheet generation state
+  // Export Progress Flags
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   useEffect(() => {
     if (!loading && (!profile || profile.role !== "supplier")) {
@@ -129,6 +130,35 @@ export default function SupplierDashboard() {
       alert("Error saving your bid.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // DYNAMIC COMPRESSED CLIENT PDF QUOTE COMPILER RUNTIME ENGINE
+  const handleGeneratePdfQuote = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // Dynamic import prevents server-side rendering breaks with html2pdf canvas hooks
+      const html2pdf = (await import("html2pdf.js")).default;
+      const element = document.getElementById("pdf-quote-content");
+      
+      if (!element) {
+        alert("Unable to locate dashboard tables stream container element.");
+        return;
+      }
+
+      const opt = {
+        margin: [0.5, 0.5, 0.5, 0.5],
+        filename: `Quote_Proposal_${profile?.companyName || "Vendor"}_${new Date().toISOString().substring(0,10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (err) {
+      console.error("PDF engine initialization failure: ", err);
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -263,16 +293,37 @@ export default function SupplierDashboard() {
 
   return (
     <div className="min-h-screen p-8 bg-slate-50">
-      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">{profile?.companyName || "Vendor"}</h1>
-          <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
-          <p className="text-xs text-slate-400 mt-1 font-medium">
-            Supplier Code: <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded ml-1">{currentSupplierNo}</span>
-          </p>
-        </div>
+      
+      {/* THIS IS THE TARGET ID CONTAINER CAPTURED FOR CLIENT-SIDE GENERATION */}
+      <div id="pdf-quote-content" className="p-4 bg-transparent rounded">
         
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        {/* RESTRUCTURED HEADER CONTAINING THE SIGNED IN USER INFORMATION & THE "TO:" METADATA */}
+        <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+              {profile?.companyName || "Vendor Procurement"}
+            </h1>
+            <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
+            <div className="text-xs text-slate-500 mt-2 space-y-0.5">
+              <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
+              <p><span className="font-semibold text-slate-700">Account Contact:</span> {profile?.name || "Active Session User"}</p>
+              <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
+            </div>
+          </div>
+          
+          {/* THE MANDATORY WEB VIEW AND PDF EXPORT DESTINATION FOR "TO:" */}
+          <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px]">
+            <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
+            <div className="text-slate-800 font-medium space-y-0.5">
+              <p className="font-bold text-sm text-slate-900">Austal USA</p>
+              <p>100 Austal Way</p>
+              <p>Mobile, AL 36602</p>
+            </div>
+          </div>
+        </header>
+
+        {/* WORKSPACE UTILITY OPERATION CONTROLS PANEL */}
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print" data-html2canvas-ignore="true">
           <button
             onClick={() => setIsFilterModalOpen(true)}
             className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
@@ -281,6 +332,14 @@ export default function SupplierDashboard() {
           </button>
           
           <button
+            onClick={handleGeneratePdfQuote}
+            disabled={isGeneratingPdf}
+            className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
+          >
+            {isGeneratingPdf ? "Compiling Document..." : "📄 Generate PDF Quote"}
+          </button>
+
+          <button
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
             className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-md hover:bg-emerald-100 transition-colors shadow-sm disabled:opacity-50"
@@ -288,127 +347,128 @@ export default function SupplierDashboard() {
             {isExportingExcel ? "Generating Spreadsheet..." : "📊 Export Table to Excel"}
           </button>
         </div>
-      </header>
 
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
-          <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
-        </div>
+        {/* MATRIX GRID DATA TABLE LISTING CONTAINER */}
+        <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
+            <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
+          </div>
 
-        <div className="overflow-x-auto">
-          {isDataLoading ? (
-            <div className="p-12 text-center text-slate-500">Loading open material parameters...</div>
-          ) : (
-            <table className="w-full text-left border-collapse text-sm">
-              <thead className="bg-slate-100 text-slate-700 font-semibold text-xs border-b border-slate-200">
-                <tr>
-                  <th className="py-3 px-4 text-center">RFQ ID</th>
-                  <th className="py-3 px-6">Item #</th>
-                  <th className="py-3 px-6">Description</th>
-                  <th className="py-3 px-6 text-right">Qty</th>
-                  <th className="py-3 px-6">UOM</th>
-                  <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> 
-                  <th className="py-3 px-6">Your Price ($)</th>
-                  <th className="py-3 px-6">Lead Time</th>
-                  <th className="py-3 px-6">Notes</th>
-                  <th className="py-3 px-6">Date Uploaded</th>
-                  <th className="py-3 px-6">Quote Date</th>
-                  <th className="py-3 px-6 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-slate-800">
-                {filteredRows.length === 0 ? (
+          <div className="overflow-x-auto">
+            {isDataLoading ? (
+              <div className="p-12 text-center text-slate-500">Loading open material parameters...</div>
+            ) : (
+              <table className="w-full text-left border-collapse text-sm">
+                <thead className="bg-slate-100 text-slate-700 font-semibold text-xs border-b border-slate-200">
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-slate-400">No material requests matched your criteria.</td>
+                    <th className="py-3 px-4 text-center">RFQ ID</th>
+                    <th className="py-3 px-6">Item #</th>
+                    <th className="py-3 px-6">Description</th>
+                    <th className="py-3 px-6 text-right">Qty</th>
+                    <th className="py-3 px-6">UOM</th>
+                    <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> 
+                    <th className="py-3 px-6">Your Price ($)</th>
+                    <th className="py-3 px-6">Lead Time</th>
+                    <th className="py-3 px-6">Notes</th>
+                    <th className="py-3 px-6">Date Uploaded</th>
+                    <th className="py-3 px-6">Quote Date</th>
+                    <th className="py-3 px-6 text-center no-print" data-html2canvas-ignore="true">Actions</th>
                   </tr>
-                ) : (
-                  filteredRows.map((item) => {
-                    const isEditing = editingId === item.id;
-                    const matchingMaterialDoc = materialsMap[item.materialId];
-                    const rawUploadedTimestamp = matchingMaterialDoc?.timestamp || null;
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-800">
+                  {filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={12} className="py-12 text-center text-slate-400">No material requests matched your criteria.</td>
+                    </tr>
+                  ) : (
+                    filteredRows.map((item) => {
+                      const isEditing = editingId === item.id;
+                      const matchingMaterialDoc = materialsMap[item.materialId];
+                      const rawUploadedTimestamp = matchingMaterialDoc?.timestamp || null;
 
-                    return (
-                      <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
-                        <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">{item.rfqId || "—"}</td>
-                        <td className="py-4 px-6 font-mono font-medium text-slate-900">{item.itemNumber}</td>
-                        <td className="py-4 px-6 max-w-xs truncate" title={item.description}>{item.description}</td>
-                        <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
-                        <td className="py-4 px-6 text-slate-500">{item.uom}</td>
-                        <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">{item.buyer || <span className="text-slate-300">—</span>}</td>
+                      return (
+                        <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditing ? 'bg-blue-50/30' : ''}`}>
+                          <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">{item.rfqId || "—"}</td>
+                          <td className="py-4 px-6 font-mono font-medium text-slate-900">{item.itemNumber}</td>
+                          <td className="py-4 px-6 max-w-xs truncate" title={item.description}>{item.description}</td>
+                          <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
+                          <td className="py-4 px-6 text-slate-500">{item.uom}</td>
+                          <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">{item.buyer || <span className="text-slate-300">—</span>}</td>
 
-                        <td className="py-3 px-4">
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={bidPrice}
-                              onChange={(e) => setBidPrice(e.target.value)}
-                              className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              placeholder="0.00"
-                            />
-                          ) : item.offeredPrice !== null ? (
-                            <span className="font-semibold text-slate-900">${item.offeredPrice.toFixed(2)}</span>
-                          ) : (
-                            <span className="text-slate-300 font-medium">Pending Entry</span>
-                          )}
-                        </td>
+                          <td className="py-3 px-4">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={bidPrice}
+                                onChange={(e) => setBidPrice(e.target.value)}
+                                className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
+                                placeholder="0.00"
+                              />
+                            ) : item.offeredPrice !== null ? (
+                              <span className="font-semibold text-slate-900">${item.offeredPrice.toFixed(2)}</span>
+                            ) : (
+                              <span className="text-slate-300 font-medium">Pending Entry</span>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={leadTime}
-                              onChange={(e) => setLeadTime(e.target.value)}
-                              className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              placeholder="e.g. 2 weeks"
-                            />
-                          ) : (
-                            <span className="text-slate-700">{item.leadTime || <span className="text-slate-300">—</span>}</span>
-                          )}
-                        </td>
+                          <td className="py-3 px-4">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={leadTime}
+                                onChange={(e) => setLeadTime(e.target.value)}
+                                className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
+                                placeholder="e.g. 2 weeks"
+                              />
+                            ) : (
+                              <span className="text-slate-700">{item.leadTime || <span className="text-slate-300">—</span>}</span>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          {isEditing ? (
-                            <input
-                              type="text"
-                              value={vendorNotes}
-                              onChange={(e) => setVendorNotes(e.target.value)}
-                              className="w-full min-w-[150px] rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              placeholder="Add optional notes..."
-                            />
-                          ) : (
-                            <span className="text-xs text-slate-500 max-w-xs truncate block" title={item.supplierNote}>
-                              {item.supplierNote || <span className="text-slate-300">—</span>}
-                            </span>
-                          )}
-                        </td>
+                          <td className="py-3 px-4">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={vendorNotes}
+                                onChange={(e) => setVendorNotes(e.target.value)}
+                                className="w-full min-w-[150px] rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
+                                placeholder="Add optional notes..."
+                              />
+                            ) : (
+                              <span className="text-xs text-slate-500 max-w-xs truncate block" title={item.supplierNote}>
+                                {item.supplierNote || <span className="text-slate-300">—</span>}
+                              </span>
+                            )}
+                          </td>
 
-                        <td className="py-3 px-6 whitespace-nowrap">{formatTimestamp(rawUploadedTimestamp, "dateOnly")}</td>
-                        <td className="py-3 px-6 text-xs">{formatTimestamp(item.timestamp, "fullTime")}</td>
+                          <td className="py-3 px-6 whitespace-nowrap">{formatTimestamp(rawUploadedTimestamp, "dateOnly")}</td>
+                          <td className="py-3 px-6 text-xs">{formatTimestamp(item.timestamp, "fullTime")}</td>
 
-                        <td className="py-3 px-6 text-center whitespace-nowrap">
-                          {isEditing ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
-                              <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">Cancel</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => startEditing(item)} className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
-                              {item.offeredPrice !== null ? "Edit Bid" : "Quote Price"}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          )}
+                          <td className="py-3 px-6 text-center whitespace-nowrap no-print" data-html2canvas-ignore="true">
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <button onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
+                                <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">Cancel</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => startEditing(item)} className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                                {item.offeredPrice !== null ? "Edit Bid" : "Quote Price"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* FILTER PARAMETERS MODAL */}
+      {/* FIXED SLIDEOUT MODAL INTERFACE WITH CRISP HIGH-CONTRAST BLACK FONT KEY IN INPUT STRINGS */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
@@ -419,19 +479,43 @@ export default function SupplierDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
-                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono" placeholder="e.g. PROJECT-1" />
+                <input 
+                  type="text" 
+                  value={filterRfqId} 
+                  onChange={(e) => setFilterRfqId(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. PROJECT-1" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono" placeholder="e.g. 1001-A" />
+                <input 
+                  type="text" 
+                  value={filterItemNumber} 
+                  onChange={(e) => setFilterItemNumber(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. 1001-A" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Pipe" />
+                <input 
+                  type="text" 
+                  value={filterDescription} 
+                  onChange={(e) => setFilterDescription(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. Steel Pipe" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
-                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. James Rush" />
+                <input 
+                  type="text" 
+                  value={filterBuyer} 
+                  onChange={(e) => setFilterBuyer(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. James Rush" 
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
