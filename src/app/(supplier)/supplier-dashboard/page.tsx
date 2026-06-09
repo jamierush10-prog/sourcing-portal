@@ -138,7 +138,8 @@ export default function SupplierDashboard() {
     setIsGeneratingPdf(true);
     try {
       // Dynamic import prevents server-side rendering breaks with html2pdf canvas hooks
-      const html2pdf = (await import("html2pdf.js")).default;
+      // @ts-ignore - html2pdf.js lacks native typings; bypass compile check for dynamic load
+const html2pdf = (await import("html2pdf.js" as any)).default;
       const element = document.getElementById("pdf-quote-content");
       
       if (!element) {
