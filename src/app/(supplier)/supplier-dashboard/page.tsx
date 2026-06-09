@@ -34,6 +34,7 @@ export default function SupplierDashboard() {
   const [materialsMap, setMaterialsMap] = useState<Record<string, any>>({});
   const [isDataLoading, setIsDataLoading] = useState(false);
 
+  // Filter States
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [filterRfqId, setFilterRfqId] = useState("");
   const [filterItemNumber, setFilterItemNumber] = useState("");
@@ -46,6 +47,7 @@ export default function SupplierDashboard() {
   const [vendorNotes, setVendorNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const filteredRows = useMemo(() => {
     return rfqs.filter((item) => {
@@ -115,25 +117,15 @@ export default function SupplierDashboard() {
       worksheet.mergeCells("A2:C2");
       worksheet.getCell("A2").value = (profile?.companyName || "VENDOR").toUpperCase();
       worksheet.getCell("A2").font = { size: 16, bold: true, color: { argb: "1E3A8A" } };
-      
-      worksheet.getCell("A5").value = "FROM:";
-      worksheet.getCell("A6").value = `Supplier: ${(profile as any)?.supplierNo || "N/A"}`;
+      worksheet.getCell("A6").value = `Supplier ID: ${(profile as any)?.supplierNo || "N/A"}`;
       worksheet.getCell("A7").value = `Contact: ${(profile as any)?.contactName || (profile as any)?.name || "N/A"}`;
       
-      worksheet.getCell("G6").value = "Austal USA";
-      worksheet.getCell("G7").value = "100 Austal Way";
-      worksheet.getCell("G8").value = "Mobile, AL 36602";
-
-      // Build Table
+      // Table
       const headers = ["RFQ ID", "Item #", "Description", "Qty", "Price", "Total"];
       worksheet.getRow(11).values = headers;
-      
       filteredRows.forEach((item, i) => {
-        const row = worksheet.addRow([
-          item.rfqId, item.itemNumber, item.description, item.quantity, item.offeredPrice || 0, { formula: `=D${12+i}*E${12+i}` }
-        ]);
-        row.getCell(5).numFmt = "$#,##0.00";
-        row.getCell(6).numFmt = "$#,##0.00";
+        const row = worksheet.addRow([item.rfqId, item.itemNumber, item.description, item.quantity, item.offeredPrice || 0, { formula: `=D${12+i}*E${12+i}` }]);
+        row.eachCell((c) => c.alignment = { vertical: "center", horizontal: "center" });
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
@@ -151,10 +143,6 @@ export default function SupplierDashboard() {
         <div>
           <h1 className="text-3xl font-bold">{profile?.companyName || "Vendor"}</h1>
           <button onClick={handleSupplierLogout} className="text-red-600 text-xs font-bold mt-2">🚪 Logout</button>
-        </div>
-        <div className="text-right text-xs">
-          <p className="font-bold">Austal USA</p>
-          <p>100 Austal Way, Mobile, AL</p>
         </div>
       </header>
 
@@ -183,22 +171,12 @@ export default function SupplierDashboard() {
               <td className="p-3">{item.quantity}</td>
               <td className="p-3">${item.offeredPrice?.toFixed(2) || "0.00"}</td>
               <td className="p-3">
-                <button onClick={() => startEditing(item)} className="text-blue-600 font-bold text-xs">Edit</button>
+                <button onClick={() => setEditingId(item.id)} className="text-blue-600 font-bold text-xs">Edit</button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      
-      {/* Filter Modal Placeholder */}
-      {isFilterModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded w-80">
-                <input className="w-full border p-2 mb-2" placeholder="Filter RFQ ID..." onChange={(e) => setFilterRfqId(e.target.value)} />
-                <button className="w-full bg-blue-600 text-white p-2" onClick={() => setIsFilterModalOpen(false)}>Apply</button>
-            </div>
-        </div>
-      )}
     </div>
   );
 }
