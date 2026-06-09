@@ -305,6 +305,20 @@ export default function SupplierDashboard() {
     }
   };
 
+  const formatTimestamp = (ts: any, mode: "dateOnly" | "fullTime") => {
+    if (!ts) return <span className="text-slate-300">—</span>;
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (mode === "dateOnly") {
+      return <span className="font-medium text-slate-600 font-mono text-xs">{date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>;
+    }
+    return (
+      <span className="font-medium text-slate-600 block whitespace-nowrap text-xs">
+        {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        <span className="text-[10px] text-slate-400 block font-normal">{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+      </span>
+    );
+  };
+
   const filteredRows = rfqs.filter((item) => {
     const computedRfqId = (item.rfqId || "").toLowerCase();
     const matchesRfqId = computedRfqId.includes(filterRfqId.trim().toLowerCase());
@@ -481,19 +495,43 @@ export default function SupplierDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
-                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. PROJECT-1" />
+                <input 
+                  type="text" 
+                  value={filterRfqId} 
+                  onChange={(e) => setFilterRfqId(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. PROJECT-1" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. 1001-A" />
+                <input 
+                  type="text" 
+                  value={filterItemNumber} 
+                  onChange={(e) => setFilterItemNumber(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. 1001-A" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. Steel Pipe" />
+                <input 
+                  type="text" 
+                  value={filterDescription} 
+                  onChange={(e) => setFilterDescription(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. Steel Pipe" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
-                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. James Rush" />
+                <input 
+                  type="text" 
+                  value={filterBuyer} 
+                  onChange={(e) => setFilterBuyer(e.target.value)} 
+                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
+                  placeholder="e.g. James Rush" 
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
