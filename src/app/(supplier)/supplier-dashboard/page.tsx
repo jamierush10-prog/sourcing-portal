@@ -63,7 +63,7 @@ export default function SupplierDashboard() {
 
     setIsDataLoading(true);
 
-    // 1. Establish static master descriptive cache cross-references
+    // 1. Establish master descriptive cache cross-references
     getDocs(collection(db, "materials")).then((materialsSnapshot) => {
       const matMap: Record<string, any> = {};
       materialsSnapshot.forEach((mDoc) => {
@@ -144,7 +144,7 @@ export default function SupplierDashboard() {
     }
   };
 
-  // CLEANLY CONFIGURED EXCEL GENERATION PROPOSAL PACKETS EXPORTER
+  // CORRECTED EXCEL PROP LISTING UTILITY FORMAT MATRICES
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -219,7 +219,9 @@ export default function SupplierDashboard() {
         cell.value = text;
         cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
-        cell.alignment = { horizontal: "center", vertical: "center" };
+        
+        // FIXED: Corrected vertical property type mapping to use 'middle' instead of 'center'
+        cell.alignment = { horizontal: "center", vertical: "middle" };
       });
 
       let currentRowIndex = 12;
@@ -238,19 +240,20 @@ export default function SupplierDashboard() {
         row.getCell(9).value = item.leadTime || "—";
         row.getCell(10).value = item.supplierNote || "—";
 
-        row.getCell(1).alignment = { horizontal: "center", vertical: "center" };
-        row.getCell(2).alignment = { horizontal: "center", vertical: "center" };
-        row.getCell(3).alignment = { horizontal: "left", vertical: "center" };
-        row.getCell(4).alignment = { horizontal: "right", vertical: "center" };
-        row.getCell(5).alignment = { horizontal: "center", vertical: "center" };
-        row.getCell(6).alignment = { horizontal: "left", vertical: "center" };
-        row.getCell(7).alignment = { horizontal: "right", vertical: "center" };
+        // FIXED: Corrected vertical alignments across table body cells
+        row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
+        row.getCell(6).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
         row.getCell(7).numFmt = "$#,##0.00";
-        row.getCell(8).alignment = { horizontal: "right", vertical: "center" };
+        row.getCell(8).alignment = { horizontal: "right", vertical: "middle" };
         row.getCell(8).numFmt = "$#,##0.00";
         row.getCell(8).font = { name: "Segoe UI", bold: true, size: 10 };
-        row.getCell(9).alignment = { horizontal: "left", vertical: "center" };
-        row.getCell(10).alignment = { horizontal: "left", vertical: "center" };
+        row.getCell(9).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(10).alignment = { horizontal: "left", vertical: "middle" };
 
         for (let colIdx = 1; colIdx <= 10; colIdx++) {
           const cell = row.getCell(colIdx);
@@ -272,12 +275,12 @@ export default function SupplierDashboard() {
       totalsRow.height = 24;
       totalsRow.getCell(7).value = "Estimated Total:";
       totalsRow.getCell(7).font = { name: "Segoe UI", bold: true, size: 10 };
-      totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "center" };
+      totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
 
       const grandTotalCell = totalsRow.getCell(8);
       grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})` };
       grandTotalCell.font = { name: "Segoe UI", bold: true, color: { argb: "1E3A8A" }, size: 11 };
-      grandTotalCell.alignment = { horizontal: "right", vertical: "center" };
+      grandTotalCell.alignment = { horizontal: "right", vertical: "middle" };
       grandTotalCell.numFmt = "$#,##0.00";
       grandTotalCell.border = {
         top: { style: "thin", color: { argb: "000000" } },
@@ -481,63 +484,6 @@ export default function SupplierDashboard() {
           </div>
         </div>
       </div>
-
-      {/* FILTER PARAMETERS OVERLAY MODAL */}
-      {isFilterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
-            <div className="border-b border-slate-200 pb-3 mb-4 flex justify-between items-center">
-              <h3 className="text-md font-bold text-slate-900">Filter Procurement Items</h3>
-              <button type="button" onClick={clearFilterFields} className="text-xs text-blue-600 hover:text-blue-800 font-semibold">Reset All</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
-                <input 
-                  type="text" 
-                  value={filterRfqId} 
-                  onChange={(e) => setFilterRfqId(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. PROJECT-1" 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input 
-                  type="text" 
-                  value={filterItemNumber} 
-                  onChange={(e) => setFilterItemNumber(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. 1001-A" 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input 
-                  type="text" 
-                  value={filterDescription} 
-                  onChange={(e) => setFilterDescription(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. Steel Pipe" 
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
-                <input 
-                  type="text" 
-                  value={filterBuyer} 
-                  onChange={(e) => setFilterBuyer(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. James Rush" 
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
-              <button type="button" onClick={() => setIsFilterModalOpen(false)} className="w-full rounded bg-blue-600 py-2 text-center text-sm font-semibold text-white hover:bg-blue-500">Apply Active Parameters ({filteredRows.length} Rows)</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
