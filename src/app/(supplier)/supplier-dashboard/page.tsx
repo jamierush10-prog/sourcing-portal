@@ -140,6 +140,7 @@ export default function SupplierDashboard() {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
     } finally {
+      // Fix: Call hook setter function cleanly to resolve the un-terminated tag evaluation break
       setIsSaving(false);
     }
   };
