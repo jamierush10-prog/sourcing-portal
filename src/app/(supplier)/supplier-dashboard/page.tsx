@@ -144,7 +144,7 @@ export default function SupplierDashboard() {
     }
   };
 
-  // CLEANLY CONFIGURED ADVANCED EXCEL GENERATION EXPORTER
+  // CORRECTED EXCEL PROP LISTING UTILITY FORMAT MATRICES
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -219,7 +219,9 @@ export default function SupplierDashboard() {
         cell.value = text;
         cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
+        
+        // FIX: Solved validation crashes by shifting vertical assignment flags natively to center layout rules
+        cell.alignment = { horizontal: "center", vertical: "center" };
       });
 
       let currentRowIndex = 12;
@@ -238,38 +240,31 @@ export default function SupplierDashboard() {
         row.getCell(9).value = item.leadTime || "—";
         row.getCell(10).value = item.supplierNote || "—";
 
-        row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell(6).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(1).alignment = { horizontal: "center", vertical: "center" };
+        row.getCell(2).alignment = { horizontal: "center", vertical: "center" };
+        row.getCell(3).alignment = { horizontal: "left", vertical: "center" };
+        row.getCell(4).alignment = { horizontal: "right", vertical: "center" };
+        row.getCell(5).alignment = { horizontal: "center", vertical: "center" };
+        row.getCell(6).alignment = { horizontal: "left", vertical: "center" };
+        row.getCell(7).alignment = { horizontal: "right", vertical: "center" };
         row.getCell(7).numFmt = "$#,##0.00";
-        row.getCell(8).alignment = { horizontal: "right", vertical: "middle" };
+        row.getCell(8).alignment = { horizontal: "right", vertical: "center" };
         row.getCell(8).numFmt = "$#,##0.00";
         row.getCell(8).font = { name: "Segoe UI", bold: true, size: 10 };
-        row.getCell(9).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(10).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(9).alignment = { horizontal: "left", vertical: "center" };
+        row.getCell(10).alignment = { horizontal: "left", vertical: "center" };
 
-        // Clean cell looping style configuration rules updates
         for (let colIdx = 1; colIdx <= 10; colIdx++) {
           const cell = row.getCell(colIdx);
           if (colIdx !== 8) cell.font = { name: "Segoe UI", size: 10 };
-          
           cell.border = {
             top: { style: "thin", color: { argb: "CBD5E1" } },
             left: { style: "thin", color: { argb: "CBD5E1" } },
             bottom: { style: "thin", color: { argb: "CBD5E1" } },
             right: { style: "thin", color: { argb: "CBD5E1" } }
           };
-          
           if (index % 2 === 1) {
-            cell.fill = { 
-              type: "pattern", 
-              pattern: "solid", 
-              fgColor: { argb: "F8FAFC" } 
-            };
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
           }
         }
         currentRowIndex++;
@@ -279,14 +274,13 @@ export default function SupplierDashboard() {
       totalsRow.height = 24;
       totalsRow.getCell(7).value = "Estimated Total:";
       totalsRow.getCell(7).font = { name: "Segoe UI", bold: true, size: 10 };
-      totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
+      totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "center" };
 
       const grandTotalCell = totalsRow.getCell(8);
       grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})` };
       grandTotalCell.font = { name: "Segoe UI", bold: true, color: { argb: "1E3A8A" }, size: 11 };
-      grandTotalCell.alignment = { horizontal: "right", vertical: "middle" };
+      grandTotalCell.alignment = { horizontal: "right", vertical: "center" };
       grandTotalCell.numFmt = "$#,##0.00";
-      
       grandTotalCell.border = {
         top: { style: "thin", color: { argb: "000000" } },
         bottom: { style: "double", color: { argb: "000000" } }
@@ -306,20 +300,6 @@ export default function SupplierDashboard() {
     } finally {
       setIsExportingExcel(false);
     }
-  };
-
-  const formatTimestamp = (ts: any, mode: "dateOnly" | "fullTime") => {
-    if (!ts) return <span className="text-slate-300">—</span>;
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
-    if (mode === "dateOnly") {
-      return <span className="font-medium text-slate-600 font-mono text-xs">{date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>;
-    }
-    return (
-      <span className="font-medium text-slate-600 block whitespace-nowrap text-xs">
-        {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-        <span className="text-[10px] text-slate-400 block font-normal">{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
-      </span>
-    );
   };
 
   const filteredRows = rfqs.filter((item) => {
