@@ -4,9 +4,10 @@
 import React, { useState, useEffect } from "react";
 import ExcelJS from "exceljs";
 import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase"; // Imported auth natively for direct logout processing
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
 
 interface RFQItem {
   id: string;
@@ -90,6 +91,17 @@ export default function SupplierDashboard() {
     }
   };
 
+  // HANDLES SECURE VENDOR LOGOUT ROUTING
+  const handleSupplierLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push("/login");
+    } catch (err) {
+      console.error("Error signing out supplier account session:", err);
+      alert("Failed to securely clear session tokens.");
+    }
+  };
+
   const startEditing = (item: RFQItem) => {
     setEditingId(item.id);
     setBidPrice(item.offeredPrice !== null ? item.offeredPrice.toString() : "");
@@ -132,17 +144,14 @@ export default function SupplierDashboard() {
     }
   };
 
-  // ADVANCED CORPORATE SHEET EXPORTER ENGINE (READY FOR PDF CONVERSION VIA EXCEL)
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Quote Proposal");
 
-      // Enforce raw grid line visibility parameters natively
       worksheet.views = [{ showGridLines: true }];
 
-      // Define standard structural baseline data tracking columns
       worksheet.columns = [
         { key: "rfqId", width: 16 },
         { key: "itemNo", width: 14 },
@@ -156,7 +165,6 @@ export default function SupplierDashboard() {
         { key: "notes", width: 32 }
       ];
 
-      // --- SECTION 1: POLISHED VENDOR BANNER & ROUTING ADDRESS STAMPS ---
       worksheet.mergeCells("A2:C2");
       const titleCell = worksheet.getCell("A2");
       titleCell.value = (profile?.companyName || "VENDOR PROCUREMENT").toUpperCase();
@@ -167,7 +175,6 @@ export default function SupplierDashboard() {
       subtitleCell.value = "Administrative Bidding Terminal Workspace Quote Proposal";
       subtitleCell.font = { name: "Segoe UI", size: 10, italic: true, color: { argb: "475569" } };
 
-      // From Information Block Mapping
       worksheet.getCell("A5").value = "FROM (Supplier Profile):";
       worksheet.getCell("A5").font = { name: "Segoe UI", size: 9, bold: true, color: { argb: "475569" } };
       
@@ -186,7 +193,6 @@ export default function SupplierDashboard() {
       worksheet.getCell("B8").value = profile?.email || "—";
       worksheet.getCell("B8").font = { name: "Segoe UI", size: 10 };
 
-      // To Information Block Mapping (Austal USA Destination)
       worksheet.getCell("G5").value = "TO (Procurement Destination):";
       worksheet.getCell("G5").font = { name: "Segoe UI", size: 9, bold: true, color: { argb: "475569" } };
 
@@ -197,13 +203,11 @@ export default function SupplierDashboard() {
       worksheet.getCell("G8").value = "Mobile, AL 36602";
       worksheet.getCell("G8").font = { name: "Segoe UI", size: 10 };
 
-      // Date Stamp Marker Metrics
       worksheet.getCell("G2").value = "DATE GENERATED:";
       worksheet.getCell("G2").font = { name: "Segoe UI", size: 10, bold: true };
       worksheet.getCell("H2").value = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       worksheet.getCell("H2").font = { name: "Segoe UI", size: 10 };
 
-      // --- SECTION 2: GRID TABLE HEADERS MATRIX MAPPING ---
       const tableHeaders = ["RFQ ID", "Item #", "Material Description", "Qty", "UOM", "Buyer Assigned", "Offered Unit Price", "Extended Total", "Lead Time", "Supplier Notes"];
       const headerRowIndex = 11;
       const headerRow = worksheet.getRow(headerRowIndex);
@@ -223,7 +227,6 @@ export default function SupplierDashboard() {
         };
       });
 
-      // --- SECTION 3: INJECT MATRIX ROWS LOG LISTING ---
       let currentRowIndex = 12;
       filteredRows.forEach((item, index) => {
         const matchingMaterial = materialsMap[item.materialId];
@@ -236,35 +239,25 @@ export default function SupplierDashboard() {
         row.getCell(4).value = Number(item.quantity || 0);
         row.getCell(5).value = item.uom || "EA";
         row.getCell(6).value = item.buyer || "—";
-        
-        // Pricing Unit Layout Format
         row.getCell(7).value = item.offeredPrice !== null ? Number(item.offeredPrice) : 0;
-        
-        // Automated Extended Price Calculation Formula (= Qty * Unit Price)
         row.getCell(8).value = { formula: `=D${currentRowIndex}*G${currentRowIndex}`, result: 0 };
-        
         row.getCell(9).value = item.leadTime || "—";
         row.getCell(10).value = item.supplierNote || "—";
 
-        // Alignments and Styling Formats
         row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
         row.getCell(2).alignment = { horizontal: "center", vertical: "middle" };
         row.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
         row.getCell(4).alignment = { horizontal: "right", vertical: "middle" };
         row.getCell(5).alignment = { horizontal: "center", vertical: "middle" };
         row.getCell(6).alignment = { horizontal: "left", vertical: "middle" };
-        
         row.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
         row.getCell(7).numFmt = "$#,##0.00";
-        
         row.getCell(8).alignment = { horizontal: "right", vertical: "middle" };
         row.getCell(8).numFmt = "$#,##0.00";
         row.getCell(8).font = { name: "Segoe UI", bold: true, size: 10 };
-
         row.getCell(9).alignment = { horizontal: "left", vertical: "middle" };
         row.getCell(10).alignment = { horizontal: "left", vertical: "middle" };
 
-        // Apply Borders and Light Zebra Striping Backdrops
         for (let colIdx = 1; colIdx <= 10; colIdx++) {
           const cell = row.getCell(colIdx);
           if (colIdx !== 8) cell.font = { name: "Segoe UI", size: 10 };
@@ -278,11 +271,9 @@ export default function SupplierDashboard() {
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "F8FAFC" } };
           }
         }
-
         currentRowIndex++;
       });
 
-      // --- SECTION 4: GRAND PROJECT TOTALS BLOCK ---
       const totalsRow = worksheet.getRow(currentRowIndex);
       totalsRow.height = 24;
       totalsRow.getCell(7).value = "Estimated Total:";
@@ -290,7 +281,6 @@ export default function SupplierDashboard() {
       totalsRow.getCell(7).alignment = { horizontal: "right", vertical: "middle" };
 
       const grandTotalCell = totalsRow.getCell(8);
-      // Continuous upper case spreadsheet parsing evaluation logic sequence hook
       grandTotalCell.value = { formula: `=SUM(H12:H${currentRowIndex - 1})`, result: 0 };
       grandTotalCell.font = { name: "Segoe UI", bold: true, color: { argb: "1E3A8A" }, size: 11 };
       grandTotalCell.alignment = { horizontal: "right", vertical: "middle" };
@@ -300,7 +290,6 @@ export default function SupplierDashboard() {
         bottom: { style: "double", color: { argb: "000000" } }
       };
 
-      // Trigger standard browser stream download window block
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = window.URL.createObjectURL(blob);
@@ -358,20 +347,32 @@ export default function SupplierDashboard() {
         
         {/* TOP LEVEL LOGISTICS ROUTING SHIPYARD METADATA HEADER BANNER */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-              {profile?.companyName || "Vendor Procurement"}
-            </h1>
-            <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
-            <div className="text-xs text-slate-500 mt-2 space-y-0.5">
-              <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
-              <p><span className="font-semibold text-slate-700">Account Contact:</span> {(profile as any)?.contactName || (profile as any)?.name || "Active Session User"}</p>
-              <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
+          <div className="w-full md:w-auto flex flex-col sm:flex-row sm:items-start justify-between sm:gap-12 md:gap-0">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+                {profile?.companyName || "Vendor Procurement"}
+              </h1>
+              <h2 className="text-lg font-bold text-slate-600 mt-1">Bidding Terminal</h2>
+              <div className="text-xs text-slate-500 mt-2 space-y-0.5">
+                <p><span className="font-semibold text-slate-700">Supplier No:</span> {currentSupplierNo}</p>
+                <p><span className="font-semibold text-slate-700">Account Contact:</span> {(profile as any)?.contactName || (profile as any)?.name || "Active Session User"}</p>
+                <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
+              </div>
+            </div>
+            
+            {/* INLINE HEADER ACCESS CONTROL TERMINAL BUTTON */}
+            <div className="mt-4 sm:mt-1">
+              <button
+                onClick={handleSupplierLogout}
+                className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition-all shadow-sm"
+              >
+                🚪 Secure Logout
+              </button>
             </div>
           </div>
           
           {/* HARDCODED DESTINATION FOR PROPOSAL PACKETS SUBMITTALS ROUTING SHOWN GRAPHICALLY */}
-          <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px]">
+          <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px] ml-auto md:ml-0">
             <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
             <div className="text-slate-800 font-medium space-y-0.5">
               <p className="font-bold text-sm text-slate-900">Austal USA</p>
@@ -519,7 +520,7 @@ export default function SupplierDashboard() {
         </div>
       </div>
 
-      {/* FILTER PARAMETERS OVERLAY MODAL (WITH CRISP HIGH-CONTRAST TEXT-SLATE-900 BLACK FONTS) */}
+      {/* FILTER PARAMETERS OVERLAY MODAL */}
       {isFilterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl border border-slate-200">
