@@ -144,7 +144,7 @@ export default function SupplierDashboard() {
     }
   };
 
-  // CORRECTED EXCEL PROP LISTING UTILITY FORMAT MATRICES
+  // CLEANLY CONFIGURED EXCEL GENERATION PROPOSAL PACKETS EXPORTER
   const handleExportTableToExcel = async () => {
     setIsExportingExcel(true);
     try {
@@ -219,8 +219,6 @@ export default function SupplierDashboard() {
         cell.value = text;
         cell.font = { name: "Segoe UI", bold: true, color: { argb: "FFFFFF" }, size: 10 };
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1E3A8A" } };
-        
-        // FIX: Solved validation crashes by shifting vertical assignment flags natively to center layout rules
         cell.alignment = { horizontal: "center", vertical: "center" };
       });
 
@@ -302,6 +300,20 @@ export default function SupplierDashboard() {
     }
   };
 
+  const formatTimestamp = (ts: any, mode: "dateOnly" | "fullTime") => {
+    if (!ts) return <span className="text-slate-300">—</span>;
+    const date = ts.toDate ? ts.toDate() : new Date(ts);
+    if (mode === "dateOnly") {
+      return <span className="font-medium text-slate-600 font-mono text-xs">{date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>;
+    }
+    return (
+      <span className="font-medium text-slate-600 block whitespace-nowrap text-xs">
+        {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        <span className="text-[10px] text-slate-400 block font-normal">{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+      </span>
+    );
+  };
+
   const filteredRows = rfqs.filter((item) => {
     const computedRfqId = (item.rfqId || "").toLowerCase();
     const matchesRfqId = computedRfqId.includes(filterRfqId.trim().toLowerCase());
@@ -340,6 +352,7 @@ export default function SupplierDashboard() {
             </div>
             <div className="mt-4 sm:mt-1">
               <button
+                type="button"
                 onClick={handleSupplierLogout}
                 className="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded transition-all shadow-sm"
               >
@@ -359,12 +372,14 @@ export default function SupplierDashboard() {
 
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           <button
+            type="button"
             onClick={() => setIsFilterModalOpen(true)}
             className="flex items-center text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-3 py-1.5 rounded-md hover:bg-slate-50 shadow-sm transition-all"
           >
             🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
           </button>
           <button
+            type="button"
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
             className="text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 px-4 py-1.5 rounded-md hover:bg-blue-100 transition-colors shadow-sm disabled:opacity-50"
@@ -447,11 +462,11 @@ export default function SupplierDashboard() {
                           <td className="py-3 px-6 text-center whitespace-nowrap">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
-                                <button onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">Cancel</button>
+                                <button type="button" onClick={() => handleSaveBid(item.id)} disabled={isSaving} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-500">{isSaving ? "Saving..." : "Save"}</button>
+                                <button type="button" onClick={cancelEditing} className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">Cancel</button>
                               </div>
                             ) : (
-                              <button onClick={() => startEditing(item)} className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                              <button type="button" onClick={() => startEditing(item)} className="inline-flex items-center rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
                                 {item.offeredPrice !== null ? "Edit Bid" : "Quote Price"}
                               </button>
                             )}
@@ -462,7 +477,7 @@ export default function SupplierDashboard() {
                   )}
                 </tbody>
               </table>
-            </div>
+            )}
           </div>
         </div>
       </div>
