@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from "react";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
-import { collection, writeBatch, doc, getDocs, query, orderBy, where, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, writeBatch, doc, onSnapshot, query, orderBy, where, updateDoc, deleteDoc, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,7 @@ interface MaterialItem {
   description: string;
   quantity: number;
   uom: string;
-  buyer: string; // Tracks buying agent identifier assignment
+  buyer: string; 
   status: "Pending" | "Sourced" | "Completed";
   quoteCount?: number;
 }
@@ -91,39 +91,44 @@ export default function AdminDashboard() {
     }
   }, [profile, loading, router]);
 
+  // LIVE REAL-TIME REQUISITION SNAPSHOT LISTENER
   useEffect(() => {
-    if (profile?.role === "admin") {
-      fetchMaterialsAndCounts();
-      fetchSuppliers();
-    }
-  }, [profile]);
+    if (profile?.role !== "admin") return;
 
-  const fetchMaterialsAndCounts = async () => {
-    try {
-      const materialsQuery = query(collection(db, "materials"), orderBy("itemNumber", "asc"));
-      const materialsSnapshot = await getDocs(materialsQuery);
+    // Map vendor lists first for descriptive lookups
+    fetchSuppliers();
+
+    const mQuery = query(collection(db, "materials"), orderBy("itemNumber", "asc"));
+    
+    // Establishing real-time connection stream to materials collection
+    const unsubscribeMaterials = onSnapshot(mQuery, async (materialsSnapshot) => {
       const itemsList: MaterialItem[] = [];
-      
       materialsSnapshot.forEach((doc) => {
         itemsList.push({ id: doc.id, ...doc.data(), quoteCount: 0 } as MaterialItem);
       });
 
-      const routingQuery = query(collection(db, "rfq_routing"), where("status", "==", "Completed"));
-      const routingSnapshot = await getDocs(routingQuery);
-      
-      routingSnapshot.forEach((routingDoc) => {
-        const data = routingDoc.data();
-        const matchingMaterial = itemsList.find(item => item.id === data.materialId);
-        if (matchingMaterial && matchingMaterial.quoteCount !== undefined) {
-          matchingMaterial.quoteCount += 1;
-        }
-      });
+      try {
+        const routingQuery = query(collection(db, "rfq_routing"), where("status", "==", "Completed"));
+        const routingSnapshot = await getDocs(routingQuery);
+        
+        routingSnapshot.forEach((routingDoc) => {
+          const data = routingDoc.data();
+          const matchingMaterial = itemsList.find(item => item.id === data.materialId);
+          if (matchingMaterial && matchingMaterial.quoteCount !== undefined) {
+            matchingMaterial.quoteCount += 1;
+          }
+        });
+      } catch (err) {
+        console.error("Error cross-referencing bid counts:", err);
+      }
 
       setMaterials(itemsList);
-    } catch (err) {
-      console.error("Error loading requirements matrix: ", err);
-    }
-  };
+    }, (err) => {
+      console.error("Live materials stream failed:", err);
+    });
+
+    return () => unsubscribeMaterials();
+  }, [profile]);
 
   const fetchSuppliers = async () => {
     try {
@@ -161,7 +166,7 @@ export default function AdminDashboard() {
               description: row["Description"] || row["description"] || "",
               quantity: Number(row["Qty"] || row["quantity"] || 0),
               uom: row["UOM"] || row["uom"] || "EA",
-              buyer: row["Buyer"] || row["buyer"] || "UNASSIGNED", // Maps buyer explicitly from CSV array
+              buyer: row["Buyer"] || row["buyer"] || "UNASSIGNED", 
               status: "Pending",
               timestamp: new Date()
             });
@@ -169,7 +174,6 @@ export default function AdminDashboard() {
 
           await batch.commit();
           setFeedbackMessage("Requirements queue initialized.");
-          fetchMaterialsAndCounts();
         } catch (error) {
           console.error("CSV upload batch failed:", error);
           setFeedbackMessage("Failed to process data columns.");
@@ -180,7 +184,6 @@ export default function AdminDashboard() {
     });
   };
 
-  // GENERATE IMPORT TEMPLATE DOWNSTREAM (WITH EXPLICIT BUYER HEADER COLUMN)
   const downloadCsvTemplate = () => {
     const headers = ["RFQ ID", "Item", "Description", "Qty", "UOM", "Buyer"];
     const sampleRows = [
@@ -201,7 +204,6 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
-  // INLINE CRUD ACTIONS ENGINE
   const startEditingRow = (item: MaterialItem) => {
     setEditingItemId(item.id);
     setEditRfqId(item.rfqId || "");
@@ -219,17 +221,35 @@ export default function AdminDashboard() {
   const handleUpdateItemRow = async (id: string) => {
     setIsSavingCrud(true);
     try {
+      const batch = writeBatch(db);
+
+      // 1. Update master material document
       const docRef = doc(db, "materials", id);
-      await updateDoc(docRef, {
+      batch.update(docRef, {
         rfqId: editRfqId.trim(), 
         itemNumber: editItemNumber.trim(),
         description: editDescription.trim(),
         quantity: Number(editQuantity),
         uom: editUom.trim(),
-        buyer: editBuyer.trim() // Commit inline buyer revision edits
+        buyer: editBuyer.trim() 
       });
+
+      // 2. Cascade update to all distributed vendor routing lines for tracking consistency
+      const subQuery = query(collection(db, "rfq_routing"), where("materialId", "==", id));
+      const subSnapshot = await getDocs(subQuery);
+      subSnapshot.forEach((subDoc) => {
+        batch.update(subDoc.ref, {
+          rfqId: editRfqId.trim(),
+          itemNumber: editItemNumber.trim(),
+          description: editDescription.trim(),
+          quantity: Number(editQuantity),
+          uom: editUom.trim(),
+          buyer: editBuyer.trim()
+        });
+      });
+
+      await batch.commit();
       setEditingItemId(null);
-      fetchMaterialsAndCounts();
     } catch (err) {
       console.error("Failed to update item row:", err);
       alert("Error saving your edits.");
@@ -239,10 +259,21 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteItemRow = async (id: string) => {
-    if (!confirm("Are you sure you want to completely delete this line requirement?")) return;
+    if (!confirm("Are you sure you want to completely delete this line requirement? This clears all active supplier child quotes as well.")) return;
     try {
-      await deleteDoc(doc(db, "materials", id));
-      fetchMaterialsAndCounts();
+      const batch = writeBatch(db);
+
+      // 1. Purge main record
+      batch.delete(doc(db, "materials", id));
+
+      // 2. Clean out any routed sub-documents so vendors don't see orphaned requirements
+      const routingSubQuery = query(collection(db, "rfq_routing"), where("materialId", "==", id));
+      const rSnapshot = await getDocs(routingSubQuery);
+      rSnapshot.forEach((rDoc) => {
+        batch.delete(rDoc.ref);
+      });
+
+      await batch.commit();
     } catch (err) {
       console.error("Failed to clear material document profile:", err);
     }
@@ -276,7 +307,7 @@ export default function AdminDashboard() {
           description: selectedItem.description,
           quantity: selectedItem.quantity,
           uom: selectedItem.uom,
-          buyer: selectedItem.buyer || "UNASSIGNED", // Relational bind of buyer parameter to supplier sub-payload
+          buyer: selectedItem.buyer || "UNASSIGNED", 
           supplierNo: supNo,
           status: "Pending",
           offeredPrice: null,
@@ -291,7 +322,6 @@ export default function AdminDashboard() {
 
       await batch.commit();
       setIsModalOpen(false);
-      fetchMaterialsAndCounts();
     } catch (err) {
       console.error("RFQ routing dispatch failed:", err);
     } finally {
@@ -359,7 +389,7 @@ export default function AdminDashboard() {
         { header: "Material Description", key: "desc", width: 36 },
         { header: "Quantity", key: "qty", width: 10 },
         { header: "UOM", key: "uom", width: 8 },
-        { header: "Buyer Assigned", key: "buyer", width: 16 }, // Added to spreadsheet columns structure map
+        { header: "Buyer Assigned", key: "buyer", width: 16 }, 
         { header: "Supplier Corporate Name", key: "supplierName", width: 26 },
         { header: "Supplier Code", key: "supplierNo", width: 14 },
         { header: "Submitted By (User Email)", key: "userEmail", width: 28 },
@@ -383,7 +413,7 @@ export default function AdminDashboard() {
           month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit"
         });
 
-        const row = worksheet.addRow({
+        worksheet.addRow({
           rfqId: quote.rfqId || "—", 
           itemNo: quote.itemNumber || "—",
           desc: quote.description || "",
@@ -398,20 +428,22 @@ export default function AdminDashboard() {
           notes: quote.supplierNote || "",
           dateStamp: formattedDate
         });
-
-        row.height = 20;
-        row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("buyer").alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
-        row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
-        row.getCell("price").numFmt = "$#,##0.00";
-        row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
       });
 
       worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          row.height = 20;
+          row.getCell("rfqId").alignment = { horizontal: "center", vertical: "middle" };
+          row.getCell("itemNo").alignment = { horizontal: "center", vertical: "middle" };
+          row.getCell("qty").alignment = { horizontal: "right", vertical: "middle" };
+          row.getCell("uom").alignment = { horizontal: "center", vertical: "middle" };
+          row.getCell("buyer").alignment = { horizontal: "left", vertical: "middle" };
+          row.getCell("supplierNo").alignment = { horizontal: "center", vertical: "middle" };
+          row.getCell("price").alignment = { horizontal: "right", vertical: "middle" };
+          row.getCell("price").numFmt = "$#,##0.00";
+          row.getCell("dateStamp").alignment = { horizontal: "left", vertical: "middle" };
+        }
+
         row.eachCell((cell) => {
           cell.border = {
             top: { style: "thin", color: { argb: "CBD5E1" } },
@@ -536,7 +568,7 @@ export default function AdminDashboard() {
                 <th className="py-3 px-6">Description</th>
                 <th className="py-3 px-6 text-right">Qty</th>
                 <th className="py-3 px-6">UOM</th>
-                <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> {/* Added Buyer Column Heading */}
+                <th className="py-3 px-6 font-semibold text-slate-700">Buyer</th> 
                 <th className="py-3 px-6 text-center">Bids Received</th>
                 <th className="py-3 px-6 text-center">Status</th>
                 <th className="py-3 px-6 text-center">Console Operations</th>
@@ -553,41 +585,40 @@ export default function AdminDashboard() {
                     <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isEditingRow ? 'bg-amber-50/40' : ''}`}>
                       <td className="py-4 px-4 text-center font-mono font-bold text-xs text-slate-700 bg-slate-50/20">
                         {isEditingRow ? (
-                          <input type="text" value={editRfqId} onChange={(e) => setEditRfqId(e.target.value)} className="w-24 text-center text-xs rounded border border-slate-300 px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono uppercase font-bold" placeholder="e.g. PROJECT-1" />
+                          <input type="text" value={editRfqId} onChange={(e) => setEditRfqId(e.target.value)} className="w-24 text-center text-xs rounded border border-slate-300 px-1 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono uppercase font-bold text-slate-900" placeholder="e.g. PROJECT-1" />
                         ) : (
                           item.rfqId || <span className="text-slate-300">—</span>
                         )}
                       </td>
                       <td className="py-4 px-6 font-mono font-medium text-slate-900">
                         {isEditingRow ? (
-                          <input type="text" value={editItemNumber} onChange={(e) => setEditItemNumber(e.target.value)} className="w-28 text-sm rounded border border-slate-300 px-2 py-1 font-mono font-medium" />
+                          <input type="text" value={editItemNumber} onChange={(e) => setEditItemNumber(e.target.value)} className="w-28 text-sm rounded border border-slate-300 px-2 py-1 font-mono font-medium text-slate-900" />
                         ) : (
                           item.itemNumber
                         )}
                       </td>
                       <td className="py-4 px-6 max-w-xs truncate" title={item.description}>
                         {isEditingRow ? (
-                          <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full min-w-[180px] text-sm rounded border border-slate-300 px-2 py-1" />
+                          <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} className="w-full min-w-[180px] text-sm rounded border border-slate-300 px-2 py-1 text-slate-900" />
                         ) : (
                           item.description
                         )}
                       </td>
                       <td className="py-4 px-6 text-right font-semibold">
                         {isEditingRow ? (
-                          <input type="number" value={editQuantity} onChange={(e) => setEditQuantity(Number(e.target.value))} className="w-16 text-sm text-right rounded border border-slate-300 px-2 py-1 font-semibold" />
+                          <input type="number" value={editQuantity} onChange={(e) => setEditQuantity(Number(e.target.value))} className="w-16 text-sm text-right rounded border border-slate-300 px-2 py-1 font-semibold text-slate-900" />
                         ) : (
                           item.quantity
                         )}
                       </td>
                       <td className="py-4 px-6 text-slate-500">
                         {isEditingRow ? (
-                          <input type="text" value={editUom} onChange={(e) => setEditUom(e.target.value)} className="w-14 text-sm rounded border border-slate-300 px-2 py-1" />
+                          <input type="text" value={editUom} onChange={(e) => setEditUom(e.target.value)} className="w-14 text-sm rounded border border-slate-300 px-2 py-1 text-slate-900" />
                         ) : (
                           item.uom
                         )}
                       </td>
                       
-                      {/* BUYER DATA VALUE INLINE CELL */}
                       <td className="py-4 px-6 text-slate-700 font-medium">
                         {isEditingRow ? (
                           <input type="text" value={editBuyer} onChange={(e) => setEditBuyer(e.target.value)} className="w-24 text-sm rounded border border-slate-300 px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900" placeholder="Agent" />
@@ -659,7 +690,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* QUOTES AUDIT LOGGER */}
+      {/* RECEIVED QUOTES AUDIT LOGGER */}
       {isQuotesModalOpen && selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl border border-slate-200 flex flex-col max-h-[85vh]">
@@ -769,20 +800,19 @@ export default function AdminDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Keyed RFQ ID / Project Reference</label>
-                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono" placeholder="e.g. REQ-001" />
+                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300" placeholder="e.g. REQ-001" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono" placeholder="e.g. 1001-A" />
+                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300" placeholder="e.g. 1001-A" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. Steel Plate" />
+                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300" placeholder="e.g. Steel Plate" />
               </div>
-              {/* Added Buyer Parameter inside the slides filtering overlay grid */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer Assigned</label>
-                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2" placeholder="e.g. James Rush" />
+                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300" placeholder="e.g. James Rush" />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">

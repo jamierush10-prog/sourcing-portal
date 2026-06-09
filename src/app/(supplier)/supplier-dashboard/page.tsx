@@ -3,8 +3,8 @@
 
 import React, { useState, useEffect } from "react";
 import ExcelJS from "exceljs";
-import { collection, getDocs, query, where, doc, updateDoc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase"; // Imported auth natively for direct logout processing
+import { collection, onSnapshot, query, where, doc, updateDoc, getDocs } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase"; 
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
@@ -56,42 +56,43 @@ export default function SupplierDashboard() {
     }
   }, [profile, loading, router]);
 
+  // LIVE REAL-TIME SUPPLIER DIRECTORY SYNC STREAM LISTENER
   useEffect(() => {
     const supplierProfile = profile as any;
-    if (!loading && profile?.role === "supplier" && supplierProfile?.supplierNo) {
-      fetchSupplierWorkspaceData();
-    }
-  }, [profile, loading]);
+    if (loading || profile?.role !== "supplier" || !supplierProfile?.supplierNo) return;
 
-  const fetchSupplierWorkspaceData = async () => {
     setIsDataLoading(true);
-    const supplierProfile = profile as any;
-    try {
-      const materialsSnapshot = await getDocs(collection(db, "materials"));
+
+    // 1. Establish static master descriptive cache cross-references
+    getDocs(collection(db, "materials")).then((materialsSnapshot) => {
       const matMap: Record<string, any> = {};
-      materialsSnapshot.forEach((doc) => {
-        matMap[doc.id] = doc.data();
+      materialsSnapshot.forEach((mDoc) => {
+        matMap[mDoc.id] = mDoc.data();
       });
       setMaterialsMap(matMap);
+    }).catch(err => console.error("Error setting up lookup maps:", err));
 
-      const q = query(
-        collection(db, "rfq_routing"),
-        where("supplierNo", "==", supplierProfile?.supplierNo || "")
-      );
-      const snapshot = await getDocs(q);
+    // 2. Open an active network query stream listener targeted specifically to this vendor's lines
+    const routingQuery = query(
+      collection(db, "rfq_routing"),
+      where("supplierNo", "==", supplierProfile.supplierNo)
+    );
+
+    const unsubscribeRouting = onSnapshot(routingQuery, (snapshot) => {
       const list: RFQItem[] = [];
       snapshot.forEach((doc) => {
         list.push({ id: doc.id, ...doc.data() } as RFQItem);
       });
       setRfqs(list);
-    } catch (err) {
-      console.error("Error pulling isolated vendor payload arrays:", err);
-    } finally {
       setIsDataLoading(false);
-    }
-  };
+    }, (err) => {
+      console.error("Live vendor query routing pipeline exception: ", err);
+      setIsDataLoading(false);
+    });
 
-  // HANDLES SECURE VENDOR LOGOUT ROUTING
+    return () => unsubscribeRouting();
+  }, [profile, loading]);
+
   const handleSupplierLogout = async () => {
     try {
       await signOut(auth);
@@ -135,7 +136,6 @@ export default function SupplierDashboard() {
       });
 
       setEditingId(null);
-      fetchSupplierWorkspaceData(); 
     } catch (err) {
       console.error("Failed to commit supplier bid data:", err);
       alert("Error saving your bid.");
@@ -229,7 +229,6 @@ export default function SupplierDashboard() {
 
       let currentRowIndex = 12;
       filteredRows.forEach((item, index) => {
-        const matchingMaterial = materialsMap[item.materialId];
         const row = worksheet.getRow(currentRowIndex);
         row.height = 20;
 
@@ -306,20 +305,6 @@ export default function SupplierDashboard() {
     }
   };
 
-  const formatTimestamp = (ts: any, mode: "dateOnly" | "fullTime") => {
-    if (!ts) return <span className="text-slate-300">—</span>;
-    const date = ts.toDate ? ts.toDate() : new Date(ts);
-    if (mode === "dateOnly") {
-      return <span className="font-medium text-slate-600 font-mono text-xs">{date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>;
-    }
-    return (
-      <span className="font-medium text-slate-600 block whitespace-nowrap text-xs">
-        {date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-        <span className="text-[10px] text-slate-400 block font-normal">{date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
-      </span>
-    );
-  };
-
   const filteredRows = rfqs.filter((item) => {
     const computedRfqId = (item.rfqId || "").toLowerCase();
     const matchesRfqId = computedRfqId.includes(filterRfqId.trim().toLowerCase());
@@ -342,10 +327,7 @@ export default function SupplierDashboard() {
 
   return (
     <div className="min-h-screen p-8 bg-slate-50">
-      
       <div className="p-4 bg-transparent rounded">
-        
-        {/* TOP LEVEL LOGISTICS ROUTING SHIPYARD METADATA HEADER BANNER */}
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
           <div className="w-full md:w-auto flex flex-col sm:flex-row sm:items-start justify-between sm:gap-12 md:gap-0">
             <div>
@@ -359,8 +341,6 @@ export default function SupplierDashboard() {
                 <p><span className="font-semibold text-slate-700">Email Address:</span> {profile?.email || "—"}</p>
               </div>
             </div>
-            
-            {/* INLINE HEADER ACCESS CONTROL TERMINAL BUTTON */}
             <div className="mt-4 sm:mt-1">
               <button
                 onClick={handleSupplierLogout}
@@ -370,8 +350,6 @@ export default function SupplierDashboard() {
               </button>
             </div>
           </div>
-          
-          {/* HARDCODED DESTINATION FOR PROPOSAL PACKETS SUBMITTALS ROUTING SHOWN GRAPHICALLY */}
           <div className="bg-white border border-slate-200 p-3.5 rounded-lg shadow-sm text-xs min-w-[210px] ml-auto md:ml-0">
             <h4 className="font-bold text-slate-400 uppercase tracking-wider mb-1">To:</h4>
             <div className="text-slate-800 font-medium space-y-0.5">
@@ -382,7 +360,6 @@ export default function SupplierDashboard() {
           </div>
         </header>
 
-        {/* UTILITY BAR OPERATIONS STRIP */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={() => setIsFilterModalOpen(true)}
@@ -390,7 +367,6 @@ export default function SupplierDashboard() {
           >
             🔍 Filter Queue { (filterRfqId || filterItemNumber || filterDescription || filterBuyer) && <span className="ml-1.5 h-2 w-2 rounded-full bg-blue-600" /> }
           </button>
-          
           <button
             onClick={handleExportTableToExcel}
             disabled={isExportingExcel}
@@ -400,12 +376,10 @@ export default function SupplierDashboard() {
           </button>
         </div>
 
-        {/* WORKSPACE LIVE REQUIREMENT TRACKING TABLE CARD */}
         <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/70">
             <h3 className="text-sm font-bold uppercase text-slate-700 tracking-wider">Open Material Items Request Log</h3>
           </div>
-
           <div className="overflow-x-auto">
             {isDataLoading ? (
               <div className="p-12 text-center text-slate-500">Loading open material parameters...</div>
@@ -446,57 +420,33 @@ export default function SupplierDashboard() {
                           <td className="py-4 px-6 text-right font-medium">{item.quantity}</td>
                           <td className="py-4 px-6 text-slate-500">{item.uom}</td>
                           <td className="py-4 px-6 text-slate-600 font-medium whitespace-nowrap">{item.buyer || <span className="text-slate-300">—</span>}</td>
-
                           <td className="py-3 px-4">
                             {isEditing ? (
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={bidPrice}
-                                onChange={(e) => setBidPrice(e.target.value)}
-                                className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-bold"
-                                placeholder="0.00"
-                              />
+                              <input type="number" step="0.01" value={bidPrice} onChange={(e) => setBidPrice(e.target.value)} className="w-24 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-bold" placeholder="0.00" />
                             ) : item.offeredPrice !== null ? (
                               <span className="font-semibold text-slate-900">${item.offeredPrice.toFixed(2)}</span>
                             ) : (
                               <span className="text-slate-300 font-medium">Pending Entry</span>
                             )}
                           </td>
-
                           <td className="py-3 px-4">
                             {isEditing ? (
-                              <input
-                                type="text"
-                                value={leadTime}
-                                onChange={(e) => setLeadTime(e.target.value)}
-                                className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-medium"
-                                placeholder="e.g. 2 weeks"
-                              />
+                              <input type="text" value={leadTime} onChange={(e) => setLeadTime(e.target.value)} className="w-28 rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 font-medium" placeholder="e.g. 2 weeks" />
                             ) : (
                               <span className="text-slate-700">{item.leadTime || <span className="text-slate-300">—</span>}</span>
                             )}
                           </td>
-
                           <td className="py-3 px-4">
                             {isEditing ? (
-                              <input
-                                type="text"
-                                value={vendorNotes}
-                                onChange={(e) => setVendorNotes(e.target.value)}
-                                className="w-full min-w-[150px] rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900"
-                                placeholder="Add optional notes..."
-                              />
+                              <input type="text" value={vendorNotes} onChange={(e) => setVendorNotes(e.target.value)} className="w-full min-w-[150px] rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-900" placeholder="Add optional notes..." />
                             ) : (
                               <span className="text-xs text-slate-500 max-w-xs truncate block" title={item.supplierNote}>
                                 {item.supplierNote || <span className="text-slate-300">—</span>}
                               </span>
                             )}
                           </td>
-
                           <td className="py-3 px-6 whitespace-nowrap">{formatTimestamp(rawUploadedTimestamp, "dateOnly")}</td>
                           <td className="py-3 px-6 text-xs">{formatTimestamp(item.timestamp, "fullTime")}</td>
-
                           <td className="py-3 px-6 text-center whitespace-nowrap">
                             {isEditing ? (
                               <div className="flex items-center justify-center gap-2">
@@ -515,7 +465,7 @@ export default function SupplierDashboard() {
                   )}
                 </tbody>
               </table>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -531,43 +481,19 @@ export default function SupplierDashboard() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">RFQ ID Reference</label>
-                <input 
-                  type="text" 
-                  value={filterRfqId} 
-                  onChange={(e) => setFilterRfqId(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. PROJECT-1" 
-                />
+                <input type="text" value={filterRfqId} onChange={(e) => setFilterRfqId(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 uppercase font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. PROJECT-1" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Item # Identifier</label>
-                <input 
-                  type="text" 
-                  value={filterItemNumber} 
-                  onChange={(e) => setFilterItemNumber(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. 1001-A" 
-                />
+                <input type="text" value={filterItemNumber} onChange={(e) => setFilterItemNumber(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 font-mono text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. 1001-A" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Material Description Keyword</label>
-                <input 
-                  type="text" 
-                  value={filterDescription} 
-                  onChange={(e) => setFilterDescription(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. Steel Pipe" 
-                />
+                <input type="text" value={filterDescription} onChange={(e) => setFilterDescription(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. Steel Pipe" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Buyer</label>
-                <input 
-                  type="text" 
-                  value={filterBuyer} 
-                  onChange={(e) => setFilterBuyer(e.target.value)} 
-                  className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" 
-                  placeholder="e.g. James Rush" 
-                />
+                <input type="text" value={filterBuyer} onChange={(e) => setFilterBuyer(e.target.value)} className="w-full text-sm rounded border border-slate-300 px-3 py-2 text-slate-900 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="e.g. James Rush" />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 mt-6">
