@@ -1,9 +1,10 @@
+// src/app/(supplier)/supplier-dashboard/page.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import ExcelJS from "exceljs";
 import { collection, onSnapshot, query, where, doc, updateDoc, getDocs } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase"; 
+import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
@@ -11,18 +12,18 @@ import { signOut } from "firebase/auth";
 interface RFQItem {
   id: string;
   materialId: string;
-  rfqId: string; 
+  rfqId: string;
   itemNumber: string;
   description: string;
   quantity: number;
   uom: string;
-  buyer: string; 
+  buyer: string;
   status: "Pending" | "Completed";
   isHot?: boolean;
   offeredPrice: number | null;
   leadTime: string | null;
   supplierNote: string;
-  timestamp: any; 
+  timestamp: any;
 }
 
 export default function SupplierDashboard() {
@@ -45,7 +46,6 @@ export default function SupplierDashboard() {
   const [vendorNotes, setVendorNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingProposal, setIsGeneratingProposal] = useState(false);
-  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   const filteredRows = useMemo(() => {
     return rfqs.filter((item) => {
@@ -58,6 +58,7 @@ export default function SupplierDashboard() {
     });
   }, [rfqs, filterRfqId, filterItemNumber, filterDescription, filterBuyer]);
 
+  // Auth & Data Listeners
   useEffect(() => {
     if (!loading && (!profile || profile.role !== "supplier")) router.push("/login");
   }, [profile, loading, router]);
@@ -65,6 +66,7 @@ export default function SupplierDashboard() {
   useEffect(() => {
     const supplierProfile = profile as any;
     if (loading || profile?.role !== "supplier" || !supplierProfile?.supplierNo) return;
+
     setIsDataLoading(true);
 
     getDocs(collection(db, "materials")).then((snap) => {
@@ -83,6 +85,7 @@ export default function SupplierDashboard() {
     return () => unsubscribe();
   }, [profile, loading]);
 
+  // Logout Function - Defined properly inside component scope
   const handleSupplierLogout = async () => {
     await signOut(auth);
     router.push("/login");
@@ -105,14 +108,9 @@ export default function SupplierDashboard() {
   const handleExportTableToExcel = async () => {
     setIsGeneratingProposal(true);
     try {
-      const workbook = new ExcelJS.Workbook();
-      const ws = workbook.addWorksheet("Quote");
-      
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Quote");
       ws.getCell("A2").value = (profile?.companyName || "VENDOR").toUpperCase();
-      ws.getCell("A2").font = { size: 16, bold: true };
-      ws.getCell("A4").value = `Supplier ID: ${(profile as any)?.supplierNo || "N/A"}`;
-      ws.getCell("A5").value = `Contact: ${(profile as any)?.contactName || "N/A"}`;
-
       ws.getRow(11).values = ["RFQ ID", "Item #", "Description", "Qty", "Price", "Total"];
       
       filteredRows.forEach((item, i) => {
@@ -120,25 +118,29 @@ export default function SupplierDashboard() {
         row.eachCell((c) => c.alignment = { vertical: "middle", horizontal: "center" });
       });
 
-      const buf = await workbook.xlsx.writeBuffer();
+      const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const a = document.createElement("a");
       a.href = window.URL.createObjectURL(blob);
-      a.download = "Quote.xlsx";
+      a.download = "Quote_Proposal.xlsx";
       a.click();
     } finally { setIsGeneratingProposal(false); }
   };
 
   return (
     <div className="min-h-screen p-8 bg-slate-50">
-      <header className="mb-8 flex justify-between border-b pb-5">
+      <header className="mb-8 flex justify-between items-start border-b pb-5">
         <div>
           <h1 className="text-3xl font-bold">{profile?.companyName || "Vendor"}</h1>
-          <button onClick={handleSupplierLogout} className="text-red-600 text-xs font-bold mt-2">🚪 Logout</button>
+          <button onClick={handleSupplierLogout} className="text-red-600 text-xs font-bold mt-2 hover:underline">🚪 Logout</button>
+        </div>
+        <div className="text-right text-xs text-slate-500">
+          <p className="font-bold text-slate-900">Austal USA</p>
+          <p>100 Austal Way, Mobile, AL</p>
         </div>
       </header>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-6">
         <button onClick={() => setIsFilterModalOpen(true)} className="bg-white border px-3 py-1 rounded text-sm">🔍 Filter</button>
         <button onClick={handleExportTableToExcel} className="bg-blue-600 text-white px-4 py-1 rounded text-sm font-bold">📑 Generate Quote Proposal</button>
       </div>
@@ -162,11 +164,22 @@ export default function SupplierDashboard() {
               <td className="p-3">{item.description}</td>
               <td className="p-3">{item.quantity}</td>
               <td className="p-3">${item.offeredPrice?.toFixed(2) || "0.00"}</td>
-              <td className="p-3"><button onClick={() => setEditingId(item.id)} className="text-blue-600 font-bold text-xs">Edit</button></td>
+              <td className="p-3">
+                <button onClick={() => setEditingId(item.id)} className="text-blue-600 font-bold text-xs">Edit</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      
+      {isFilterModalOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
+            <div className="bg-white p-6 rounded w-80">
+                <input className="w-full border p-2 mb-2" placeholder="RFQ ID..." onChange={(e) => setFilterRfqId(e.target.value)} />
+                <button className="w-full bg-blue-600 text-white p-2" onClick={() => setIsFilterModalOpen(false)}>Apply</button>
+            </div>
+        </div>
+      )}
     </div>
   );
 }
