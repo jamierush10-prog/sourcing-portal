@@ -133,17 +133,18 @@ export default function SupplierDashboard() {
     }
   };
 
-  // FULLY OPTIMIZED CLIENT-SIDE PDF GENERATOR 
+  // REFACTORED AND BULLETPROOF PDF GENERATION ENGINE
   const handleGeneratePdfQuote = async () => {
     if (typeof window === "undefined") return;
 
     setIsGeneratingPdf(true);
     try {
-      // @ts-ignore - Dynamic compile override to clear strict deployment environment checks safely
-      const html2pdfModule = await import("html2pdf.js" as any);
-      const html2pdf = html2pdfModule.default;
-      const element = document.getElementById("pdf-quote-content");
+      // Import the module dynamically and resolve it directly as an active callable instance variable
+      // @ts-ignore
+      const html2pdfModule = await import("html2pdf.js");
+      const html2pdf = html2pdfModule.default || html2pdfModule;
       
+      const element = document.getElementById("pdf-quote-content");
       if (!element) {
         alert("Unable to locate dashboard tables wrapper matching target layout container.");
         setIsGeneratingPdf(false);
@@ -158,10 +159,11 @@ export default function SupplierDashboard() {
         jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
       };
 
+      // Execute conversion cycle smoothly
       await html2pdf().set(opt).from(element).save();
     } catch (err) {
-      console.error("PDF engine initialization failure: ", err);
-      alert("Error compiling PDF document output layer template structural matrices.");
+      console.error("PDF engine initialization failure details:", err);
+      alert(`PDF System Notice: Failed to generate output stream canvas. Error info: ${err instanceof Error ? err.message : err}`);
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -299,7 +301,6 @@ export default function SupplierDashboard() {
   return (
     <div className="min-h-screen p-8 bg-slate-50">
       
-      {/* Target canvas container layer hooked by html2pdf print engine */}
       <div id="pdf-quote-content" className="p-4 bg-transparent rounded">
         
         <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-5 gap-6">
@@ -325,7 +326,6 @@ export default function SupplierDashboard() {
           </div>
         </header>
 
-        {/* Action operation controls panel (Hidden from canvas download stream outputs via utility flags) */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 no-print" data-html2canvas-ignore="true">
           <button
             onClick={() => setIsFilterModalOpen(true)}
